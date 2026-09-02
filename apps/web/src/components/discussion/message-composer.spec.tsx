@@ -35,4 +35,22 @@ describe("MessageComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(textarea).toHaveValue("토론을 시작해볼까요");
   });
+
+  it("focuses the draft for a reply and lets Escape cancel it", () => {
+    const onCancelReply = vi.fn();
+    render(
+      <MessageComposer
+        replyingTo="수진"
+        replyingQuote="침묵도 하나의 선택일까요?"
+        onCancelReply={onCancelReply}
+      />,
+    );
+    const textarea = screen.getByRole("textbox", { name: "토론 메시지" });
+
+    expect(textarea).toHaveFocus();
+    expect(screen.getByText("침묵도 하나의 선택일까요?")).toBeInTheDocument();
+    fireEvent.keyDown(textarea, { key: "Escape", code: "Escape" });
+
+    expect(onCancelReply).toHaveBeenCalledOnce();
+  });
 });

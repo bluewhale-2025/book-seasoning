@@ -124,8 +124,8 @@ export function DiscussionSessionScreen({
 
   return (
     <TooltipProvider>
-      <div className="min-h-dvh bg-background">
-        <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background">
+        <header className="z-30 shrink-0 border-b border-border bg-surface/95 backdrop-blur">
           <div className="mx-auto flex min-h-14 max-w-[var(--layout-conversation-max)] items-center justify-between gap-3 px-4 sm:px-5">
             <span className="text-label text-accent-strong">책은양념</span>
             <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export function DiscussionSessionScreen({
 
         {connectionStatus !== "connected" && (
           <div
-            className="border-b border-warning/25 bg-warning-background px-4 py-2 text-center text-sm text-warning"
+            className="shrink-0 border-b border-warning/25 bg-warning-background px-4 py-2 text-center text-sm text-warning"
             role="status"
           >
             {connectionStatus === "failed"
@@ -152,7 +152,7 @@ export function DiscussionSessionScreen({
           </div>
         )}
 
-        <main className="mx-auto min-h-[calc(100dvh-3.5rem)] max-w-[var(--layout-conversation-max)] border-x border-border/70 bg-surface max-sm:border-x-0">
+        <main className="mx-auto flex min-h-0 w-full max-w-[var(--layout-conversation-max)] flex-1 flex-col overflow-hidden border-x border-border/70 bg-surface max-sm:border-x-0">
           <BookContextHeader
             title={snapshot.room.bookTitle}
             author={snapshot.room.bookAuthor}
@@ -162,6 +162,8 @@ export function DiscussionSessionScreen({
             remainingSeconds={remainingSeconds}
             phase={snapshot.state.phase}
             participantCount={snapshot.connectedParticipantCount}
+            compact
+            className="shrink-0"
           />
 
           <SessionControls
@@ -178,10 +180,10 @@ export function DiscussionSessionScreen({
           />
 
           {snapshot.publicDiscussion.currentTopic && (
-            <CurrentTopic topic={snapshot.publicDiscussion.currentTopic} />
+            <CurrentTopic topic={snapshot.publicDiscussion.currentTopic} compact className="shrink-0" />
           )}
 
-          <details className="border-b border-border bg-surface-muted px-4 py-2.5 sm:px-5">
+          <details className="shrink-0 border-b border-border bg-surface-muted px-4 py-2.5 sm:px-5">
             <summary className="text-metadata flex min-h-8 cursor-pointer list-none items-center gap-2 font-semibold">
               <Users aria-hidden="true" className="size-4 text-accent-strong" />
               참가자 {snapshot.participants.length}명
@@ -226,6 +228,8 @@ export function DiscussionSessionScreen({
             <MessageComposer
               disabled={!controller.composerEnabled}
               replyingTo={replyTarget?.author.profileName}
+              replyingQuote={replyTarget?.body}
+              sticky={false}
               onCancelReply={() => store.getState().setReplyTarget(null)}
               onTypingChange={controller.setLocalTyping}
               onSubmit={(body) => void controller.sendMessage(body)}

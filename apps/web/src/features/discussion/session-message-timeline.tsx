@@ -35,12 +35,19 @@ export function SessionMessageTimeline({
   const pendingMessages = useSessionStore((state) => state.pendingMessages);
   const viewport = useMessageViewport(
     snapshot.sessionId,
-    snapshot.cursors.latestMessageSeq,
+    snapshot.messages.map((message) => message.messageId),
   );
 
   return (
-    <>
-      <section className="min-h-[55dvh] px-4 py-6 sm:px-6" aria-label="토론 메시지">
+    <div className="relative flex min-h-0 flex-1">
+      <section
+        ref={viewport.viewportRef}
+        className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 [overflow-anchor:none] sm:px-6"
+        aria-label="토론 메시지"
+        data-testid="session-message-viewport"
+        tabIndex={0}
+        onScroll={viewport.handleScroll}
+      >
         {snapshot.cursors.hasMoreMessagesBefore && (
           <div className="mb-6 text-center">
             <Button
@@ -54,7 +61,10 @@ export function SessionMessageTimeline({
           </div>
         )}
 
-        <div aria-live="polite" aria-relevant="additions">
+        <div
+          aria-live={viewport.atLatest ? "polite" : "off"}
+          aria-relevant="additions"
+        >
           {snapshot.messages.map((message) =>
             message.kind === "AI_HOST" ? (
               <AIHostIntervention key={message.messageId}>{message.body}</AIHostIntervention>
@@ -94,12 +104,17 @@ export function SessionMessageTimeline({
       </section>
 
       {viewport.newMessageCount > 0 && (
-        <div className="sticky bottom-24 z-20 flex justify-center px-4">
-          <Button variant="primary" size="sm" onClick={viewport.scrollToLatest}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-4">
+          <Button
+            variant="primary"
+            size="sm"
+            className="pointer-events-auto shadow-[var(--shadow-medium)]"
+            onClick={viewport.scrollToLatest}
+          >
             새 메시지 {viewport.newMessageCount}개
           </Button>
         </div>
       )}
-    </>
+    </div>
   );
 }

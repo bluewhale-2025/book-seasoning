@@ -60,7 +60,7 @@ export function ParticipantMessage({
 
       <div className="min-w-0">
         {!consecutive && (
-          <header className="mb-1 flex min-h-[19px] items-center gap-2">
+          <header className="mb-1 flex min-h-[19px] items-center gap-2 max-sm:pr-10">
             <span className="text-metadata font-semibold text-foreground">{author}</span>
             <time className="text-caption text-muted-foreground" dateTime={timestamp}>
               {timestamp}
@@ -72,7 +72,7 @@ export function ParticipantMessage({
       </div>
 
       {onReply && (
-        <div className="absolute -top-2 right-0 flex items-center rounded-md border border-border bg-surface-elevated p-0.5 shadow-[var(--shadow-low)] opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100 max-sm:static max-sm:mt-2 max-sm:ml-12 max-sm:w-fit max-sm:opacity-100">
+        <div className="absolute -top-2 right-0 flex items-center rounded-md border border-border bg-surface-elevated p-0.5 opacity-0 shadow-[var(--shadow-low)] group-hover/message:opacity-100 group-focus-within/message:opacity-100 max-sm:top-0 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:opacity-100 max-sm:shadow-none">
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton label={`${author}님에게 답장`} variant="ghost" className="size-10" onClick={onReply}>

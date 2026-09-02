@@ -65,3 +65,58 @@ test("the discussion route has no automatic WCAG A/AA violations", async ({ page
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   expect(results.violations).toEqual([]);
 });
+
+test("new messages do not pull a reader away from older conversation", async ({ page, request }) => {
+  for (let index = 2; index <= 24; index += 1) {
+    await request.post(
+      "http://127.0.0.1:4174/v1/rooms/90000000-0000-4000-8000-000000000001/session/messages",
+      {
+        headers: { authorization: "Bearer participant" },
+        data: {
+          clientMessageId: `98000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+          body: `스크롤 검증 메시지 ${index}`,
+          replyToMessageId: null,
+        },
+      },
+    );
+  }
+
+  await page.goto("/e2e/session.html?actor=host");
+  const viewport = page.getByTestId("session-message-viewport");
+  await expect(page.getByText("스크롤 검증 메시지 24")).toBeVisible();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(0);
+
+  await request.post(
+    "http://127.0.0.1:4174/v1/rooms/90000000-0000-4000-8000-000000000001/session/messages",
+    {
+      headers: { authorization: "Bearer participant" },
+      data: {
+        clientMessageId: "98000000-0000-4000-8000-000000000025",
+        body: "과거를 읽는 동안 도착한 메시지",
+        replyToMessageId: null,
+      },
+    },
+  );
+
+  await expect(page.getByRole("button", { name: "새 메시지 1개" })).toBeVisible();
+  expect(await viewport.evaluate((element) => element.scrollTop)).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await page.getByRole("button", { name: "새 메시지 1개" }).click();
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+  await expect(page.getByRole("button", { name: "새 메시지 1개" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.scrollHeight)).toBe(
+    await page.evaluate(() => window.innerHeight),
+  );
+});

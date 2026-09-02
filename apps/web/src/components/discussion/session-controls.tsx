@@ -3,6 +3,7 @@ import { LoaderCircle, OctagonX, TimerReset } from "lucide-react";
 
 import type { SessionPhase } from "@bookseasoning/contracts/public";
 
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -50,7 +51,14 @@ export function SessionControls({
           className="border-b border-border bg-surface-muted px-4 py-3 sm:px-5"
           aria-label="세션 운영"
         >
-          <div className="mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            className={cn(
+              "mx-auto flex gap-3",
+              extensionDecisionOpen
+                ? "flex-col sm:flex-row sm:items-center sm:justify-between"
+                : "items-center justify-between",
+            )}
+          >
             {extensionDecisionOpen ? (
               <div className="min-w-0">
                 <p className="text-label m-0 text-foreground">

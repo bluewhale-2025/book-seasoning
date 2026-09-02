@@ -29,7 +29,7 @@ export type SessionEphemeralState = Readonly<{
   setPresence(userIds: ReadonlySet<string>): void;
   setTyping(userId: string, typing: boolean): void;
   setReplyTarget(target: ReplyTarget | null): void;
-  incrementNewMessageCount(): void;
+  addNewMessageCount(count: number): void;
   clearNewMessageCount(): void;
 }>;
 
@@ -74,8 +74,8 @@ export function createSessionEphemeralStore(): StoreApi<SessionEphemeralState> {
         return { typingUserIds };
       }),
     setReplyTarget: (replyTarget) => set({ replyTarget }),
-    incrementNewMessageCount: () =>
-      set((state) => ({ newMessageCount: state.newMessageCount + 1 })),
+    addNewMessageCount: (count) =>
+      set((state) => ({ newMessageCount: state.newMessageCount + Math.max(0, count) })),
     clearNewMessageCount: () => set({ newMessageCount: 0 }),
   }));
 }

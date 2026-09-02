@@ -7,7 +7,9 @@ import { IconButton } from "../ui/button";
 type MessageComposerProps = Omit<React.ComponentProps<"form">, "onSubmit"> & {
   placeholder?: string;
   disabled?: boolean;
+  disabledPlaceholder?: string;
   replyingTo?: string;
+  replyingQuote?: string;
   sticky?: boolean;
   onSubmit?: (message: string) => void;
   onTypingChange?: (typing: boolean) => void;
@@ -17,7 +19,9 @@ type MessageComposerProps = Omit<React.ComponentProps<"form">, "onSubmit"> & {
 export function MessageComposer({
   placeholder = "생각을 나눠주세요…",
   disabled = false,
+  disabledPlaceholder = "대화를 동기화하는 동안 기다려 주세요…",
   replyingTo,
+  replyingQuote,
   sticky = true,
   onSubmit,
   onTypingChange,
@@ -28,6 +32,19 @@ export function MessageComposer({
   const [message, setMessage] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const composingRef = React.useRef(false);
+  const previousReplyingToRef = React.useRef<string | undefined>(undefined);
+  const helpId = React.useId();
+
+  React.useEffect(() => {
+    if (replyingTo && replyingTo !== previousReplyingToRef.current) {
+      textareaRef.current?.focus({ preventScroll: true });
+    }
+    previousReplyingToRef.current = replyingTo;
+  }, [replyingTo]);
+
+  React.useEffect(() => {
+    if (disabled) onTypingChange?.(false);
+  }, [disabled, onTypingChange]);
 
   function resizeTextarea() {
     const textarea = textareaRef.current;
@@ -49,7 +66,7 @@ export function MessageComposer({
   return (
     <form
       className={cn(
-        "border-t border-border bg-surface px-3 py-3 sm:px-4",
+        "shrink-0 border-t border-border bg-surface px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4",
         sticky && "sticky bottom-0 z-20",
         className,
       )}
@@ -57,9 +74,10 @@ export function MessageComposer({
       {...props}
     >
       {replyingTo && (
-        <div className="text-caption mb-2 flex items-center justify-between gap-2 px-1 text-muted-foreground">
-          <span>
-            <span className="font-semibold text-foreground">{replyingTo}</span>님에게 답장
+        <div className="text-caption mb-2 flex min-w-0 items-center justify-between gap-2 rounded-md bg-surface-muted px-2 py-1.5 text-muted-foreground">
+          <span className="min-w-0">
+            <span className="block font-semibold text-foreground">{replyingTo}님에게 답장</span>
+            {replyingQuote && <span className="block truncate">{replyingQuote}</span>}
           </span>
           {onCancelReply && (
             <IconButton
@@ -84,7 +102,9 @@ export function MessageComposer({
           value={message}
           disabled={disabled}
           maxLength={2000}
-          placeholder={disabled ? "세션이 종료되었습니다" : placeholder}
+          placeholder={disabled ? disabledPlaceholder : placeholder}
+          aria-describedby={helpId}
+          enterKeyHint="send"
           onChange={(event) => {
             setMessage(event.target.value);
             onTypingChange?.(event.target.value.trim().length > 0);
@@ -96,7 +116,13 @@ export function MessageComposer({
           onCompositionEnd={() => {
             composingRef.current = false;
           }}
+          onBlur={() => onTypingChange?.(false)}
           onKeyDown={(event) => {
+            if (event.key === "Escape" && replyingTo && onCancelReply) {
+              event.preventDefault();
+              onCancelReply();
+              return;
+            }
             if (event.key === "Enter" && !event.shiftKey) {
               if (composingRef.current || event.nativeEvent.isComposing || event.keyCode === 229) {
                 return;
@@ -117,9 +143,12 @@ export function MessageComposer({
           <SendHorizontal aria-hidden="true" />
         </IconButton>
       </div>
-      <p className="text-caption mt-1.5 mb-0 px-1 text-muted-foreground">
-        Enter로 보내기 · Shift+Enter로 줄바꿈
-      </p>
+      <div id={helpId} className="text-caption mt-1.5 flex justify-between gap-3 px-1 text-muted-foreground">
+        <span>Enter로 보내기 · Shift+Enter로 줄바꿈</span>
+        {message.length >= 1800 && (
+          <span className="shrink-0 tabular-nums" aria-live="polite">{message.length}/2000</span>
+        )}
+      </div>
     </form>
   );
 }
