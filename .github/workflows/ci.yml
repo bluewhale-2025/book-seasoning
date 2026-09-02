@@ -23,7 +23,9 @@ jobs:
           version: 11.25.0
           runtime: node@24.18.0
           cache: true
-          require-lockfile: true
       - run: pnpm check
+      - run: pnpm db:start
       - run: pnpm check:db
+      - if: always()
+        run: pnpm db:stop
       - run: docker build --tag bookseasoning:${{ github.sha }} .
