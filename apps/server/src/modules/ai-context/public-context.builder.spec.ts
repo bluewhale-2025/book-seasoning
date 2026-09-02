@@ -10,6 +10,7 @@ import {
 
 import type { BookContextProvider } from "../book-context/book-context.provider.js";
 import {
+  EVALUATOR_BOOK_ITEM_BUDGET,
   PublicContextBuilder,
 } from "./public-context.builder.js";
 import type {
@@ -118,16 +119,27 @@ class FakePublicContextRepository implements PublicContextRepository {
   }
 }
 
-const provider = (packVersionId = BookContextDocumentV1Fixture.packVersionId) =>
-  ({
-    getPackVersion: () =>
-      Promise.resolve({ ...BookContextDocumentV1Fixture, packVersionId }),
-  }) satisfies BookContextProvider;
+const provider = (packVersionId = BookContextDocumentV1Fixture.packVersionId) => {
+  const calls: unknown[] = [];
+  return {
+    calls,
+    implementation: {
+      getPackVersion: (input: unknown) => {
+        calls.push(input);
+        return Promise.resolve({ ...BookContextDocumentV1Fixture, packVersionId });
+      },
+    } satisfies BookContextProvider,
+  };
+};
 
 describe("PublicContextBuilder", () => {
   it("assembles only PUBLIC Raw Data with the exact pinned Pack", async () => {
     const repository = new FakePublicContextRepository();
-    const subject = new PublicContextBuilder(repository, provider());
+    const bookProvider = provider();
+    const subject = new PublicContextBuilder(
+      repository,
+      bookProvider.implementation,
+    );
 
     const result = await subject.build({
       sessionId,
@@ -147,12 +159,25 @@ describe("PublicContextBuilder", () => {
       throughSeq: 6,
       limit: 201,
     });
+    expect(bookProvider.calls).toEqual([
+      {
+        packVersionId: BookContextDocumentV1Fixture.packVersionId,
+        consumer: "EVALUATOR",
+        query: expect.stringContaining("공개 메시지 6"),
+        preferredItemIds:
+          LivingWikiVersionV1Fixture.document.bookGrounding.map(
+            (grounding) => grounding.bookContextItemRef.itemId,
+          ),
+        maxItems: EVALUATOR_BOOK_ITEM_BUDGET,
+      },
+    ]);
+    expect(EVALUATOR_BOOK_ITEM_BUDGET).toBe(8);
   });
 
   it("fails closed when the Provider returns a different Pack version", async () => {
     const subject = new PublicContextBuilder(
       new FakePublicContextRepository(),
-      provider("94000000-0000-4000-8000-000000000001"),
+      provider("94000000-0000-4000-8000-000000000001").implementation,
     );
 
     await expect(
@@ -168,7 +193,7 @@ describe("PublicContextBuilder", () => {
     );
     const subject = new PublicContextBuilder(
       new FakePublicContextRepository(messages),
-      provider(),
+      provider().implementation,
     );
 
     await expect(
@@ -183,7 +208,10 @@ describe("PublicContextBuilder", () => {
       ...frame,
       session: { ...frame.session, targetThroughSeq: 5 },
     });
-    const subject = new PublicContextBuilder(repository, provider());
+    const subject = new PublicContextBuilder(
+      repository,
+      provider().implementation,
+    );
 
     await expect(
       subject.build({ sessionId, baseWikiVersion: 1, targetThroughSeq: 6 }),

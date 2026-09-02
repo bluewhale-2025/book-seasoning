@@ -86,15 +86,20 @@ export {
 export {
   PublicEvaluatorOutputSchemaVersionSchema,
   PublicEvaluatorOutputV1Schema,
-  PublicEvaluatorProviderOutputV1Schema,
+  PublicEvaluatorProviderObservationV3Schema,
+  PublicEvaluatorProviderOutputV2Schema,
   type PublicEvaluatorOutputV1,
+  type PublicEvaluatorProviderObservationV3,
+  type PublicEvaluatorProviderOutputV2,
 } from "./ai-evaluator.js";
 export {
+  AiProviderRequestMetricsV1Schema,
   AiProviderRunV1Schema,
   AiReasoningEffortSchema,
   AiTaskAliasSchema,
   HostContextV1Schema,
   OpeningContextV1Schema,
+  type AiProviderRequestMetricsV1,
   type AiProviderRunV1,
   type AiReasoningEffort,
   type AiTaskAlias,

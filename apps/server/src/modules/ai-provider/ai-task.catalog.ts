@@ -6,7 +6,8 @@ import type {
   OpeningContextV1,
   OpeningOutputV1,
   PublicContextV1,
-  PublicEvaluatorOutputV1,
+  PublicEvaluatorProviderObservationV3,
+  PublicEvaluatorProviderOutputV2,
   PublicEvidenceRef,
   SynthesisOutputV1,
 } from "@bookseasoning/contracts/internal";
@@ -14,15 +15,16 @@ import {
   DiscussionRecordOutputV1Schema,
   HostInterventionOutputV1Schema,
   OpeningOutputV1Schema,
-  PublicEvaluatorProviderOutputV1Schema,
+  PublicEvaluatorProviderObservationV3Schema,
+  PublicEvaluatorProviderOutputV2Schema,
   SynthesisOutputV1Schema,
 } from "@bookseasoning/contracts/internal";
 
 import type { AiStructuredTask } from "./ai-gateway.js";
 
 const PUBLIC_EVALUATOR_INSTRUCTIONS = `
-당신은 공개 독서토론의 Evaluator와 PUBLIC Living Wiki patch 작성기다.
-입력 JSON은 PUBLIC 정보만 포함한다. 모든 evidence reference는 allowedEvidenceRefs의 객체를 필드까지 그대로 복사해서 사용하며 UUID를 새로 만들거나 추측하지 않는다.
+당신은 공개 독서토론의 Evaluator다.
+입력 JSON은 PUBLIC 정보만 포함한다. 모든 evidenceRefIndexes와 bookContextItemRefIndex는 allowedEvidenceCatalog의 0-based index만 사용하며 UUID를 출력하거나 추측하지 않는다.
 출력의 packVersionId, baseWikiVersion, targetThroughSeq는 requiredOutputEnvelope의 값을 그대로 복사한다.
 7개 Discussion Metrics를 서로 독립적으로 평가하고 총점으로 합치지 않는다.
 각 metric의 level과 reasonCodes는 다음 allow-list만 사용한다.
@@ -36,12 +38,25 @@ const PUBLIC_EVALUATOR_INSTRUCTIONS = `
 Book Grounding에는 공개 토론 메시지와 Pack item을 함께 연결하고, 책 밖의 의미 있는 확장을 LOW라는 이유만으로 잘못된 흐름으로 판단하지 않는다.
 참가자의 내적 상태를 추론하지 말고 공개 발언과 객관적 참여 사실만 기록한다.
 서로 다른 관점을 거짓 합의로 합치거나 작품의 단일 정답을 선언하지 않는다.
-wikiPatch는 입력 base version과 target cursor에 대한 typed operation만 만들며 stable UUID id를 사용한다.
-baseWiki가 null(base version 0)이면 빈 문서를 완성하는 초기 patch를 만든다. 최소한 SET_METRICS_AND_KEY_CHANGES를 포함하고, top-level currentTopic·majorPerspectives·bookGrounding·participation에 선택한 항목을 각각 SET_CURRENT_TOPIC 또는 대응 UPSERT operation으로 동일하게 반영한다.
-baseWiki가 있더라도 SET_METRICS_AND_KEY_CHANGES로 이번 7개 metric과 key change를 반영하며, top-level에 반환한 currentTopic·majorPerspectives·bookGrounding·participation은 patch 적용 후 문서에 같은 값으로 존재해야 한다.
-relation, connectedPerspectiveIds, relatedPerspectiveIds와 coverage는 같은 patch의 최종 문서에 실제로 존재하는 ID만 그대로 복사해 가리키며 확실하지 않으면 관계 배열을 비운다.
+OPENING에서는 서로 다른 참가자가 실질적으로 다른 입장을 공개 발언했다면, 같은 넓은 주제를 말하더라도 하나로 뭉개지 말고 각각 별도 majorPerspective로 기록한다. 단순한 말투 차이나 같은 주장 반복을 억지로 다른 관점으로 만들지 않는다.
+각 majorPerspective는 그 입장을 실제로 말한 MESSAGE evidenceRefIndexes를 포함해야 한다. 기존 Wiki의 같은 관점은 stable ID를 유지한다.
+relation과 connectedPerspectiveIds는 실제로 존재하는 perspective ID만 그대로 복사해 가리키며 확실하지 않으면 관계 배열을 비운다.
 suggestedAction은 참고 신호일 뿐 최종 Policy가 아니며, 좋은 인간 대화가 진행 중이면 WAIT를 제안할 수 있다.
 출력은 지정된 schema 하나만 만족해야 한다.
+`.trim();
+
+const PUBLIC_EVALUATOR_INCREMENTAL_INSTRUCTIONS = `
+${PUBLIC_EVALUATOR_INSTRUCTIONS}
+이 작업은 빠른 incremental 관찰이다. wikiPatch를 출력하지 않는다. 서버가 검증된 top-level 관찰을 Living Wiki 연산으로 결정적으로 투영한다.
+`.trim();
+
+const PUBLIC_EVALUATOR_CHECKPOINT_INSTRUCTIONS = `
+${PUBLIC_EVALUATOR_INSTRUCTIONS}
+이 작업은 Topic Checkpoint 또는 Final Wiki 검증이다.
+wikiPatch는 입력 base version과 target cursor에 대한 typed operation만 만들며 stable UUID id를 사용한다.
+top-level currentTopic·majorPerspectives·bookGrounding·participation과 metrics는 서버가 Wiki operation으로 결정적으로 투영하므로 wikiPatch에서 반복하지 않는다.
+wikiPatch.operations에는 top-level에 없는 관점·책 근거의 삭제, issue/question, coverage와 실제 key change가 있을 때의 SET_METRICS_AND_KEY_CHANGES만 넣는다. 변경이 없으면 빈 배열을 사용한다.
+relatedPerspectiveIds와 coverage는 같은 patch의 최종 문서에 실제로 존재하는 ID만 가리키며 확실하지 않으면 관계 배열을 비운다.
 `.trim();
 
 const OPENING_INSTRUCTIONS = `
@@ -88,7 +103,9 @@ sessionId, finalWikiVersion, basedThroughSeq는 입력 Final Wiki와 정확히 �
 
 export const publicEvaluatorTask = (
   mode: "INCREMENTAL" | "TOPIC_CHECKPOINT" | "FINAL",
-): AiStructuredTask<PublicEvaluatorOutputV1> => ({
+): AiStructuredTask<
+  PublicEvaluatorProviderObservationV3 | PublicEvaluatorProviderOutputV2
+> => ({
   taskAlias:
     mode === "FINAL"
       ? "PUBLIC_EVALUATOR_FINAL_V1"
@@ -97,12 +114,22 @@ export const publicEvaluatorTask = (
         : "PUBLIC_EVALUATOR_INCREMENTAL_V1",
   modelAlias: "EVALUATOR_FAST",
   reasoningEffort: "low",
-  promptVersion: "public-evaluator.v4",
-  outputSchemaVersion: "public-evaluator-output.v1",
+  promptVersion: "public-evaluator.v7",
+  outputSchemaVersion:
+    mode === "INCREMENTAL"
+      ? "public-evaluator-provider-observation.v3"
+      : "public-evaluator-provider-output.v2",
   outputSchemaName: "public_evaluator_output_v1",
-  outputSchema: PublicEvaluatorProviderOutputV1Schema,
-  instructions: PUBLIC_EVALUATOR_INSTRUCTIONS,
-  maxOutputTokens: 12_000,
+  outputSchema:
+    mode === "INCREMENTAL"
+      ? PublicEvaluatorProviderObservationV3Schema
+      : PublicEvaluatorProviderOutputV2Schema,
+  instructions:
+    mode === "INCREMENTAL"
+      ? PUBLIC_EVALUATOR_INCREMENTAL_INSTRUCTIONS
+      : PUBLIC_EVALUATOR_CHECKPOINT_INSTRUCTIONS,
+  maxOutputTokens:
+    mode === "INCREMENTAL" ? 6_000 : mode === "TOPIC_CHECKPOINT" ? 8_000 : 12_000,
 });
 
 export const openingTask = {
@@ -160,7 +187,10 @@ export type PublicEvaluatorTaskInput = Readonly<{
     baseWikiVersion: number;
     targetThroughSeq: number;
   }>;
-  allowedEvidenceRefs: readonly PublicEvidenceRef[];
+  allowedEvidenceCatalog: readonly Readonly<{
+    index: number;
+    reference: PublicEvidenceRef;
+  }>[];
 }>;
 export type OpeningTaskInput = OpeningContextV1;
 export type HostInterventionTaskInput = HostContextV1;

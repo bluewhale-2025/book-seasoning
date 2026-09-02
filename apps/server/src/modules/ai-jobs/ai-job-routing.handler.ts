@@ -94,7 +94,9 @@ export class AiJobRoutingHandler implements AiJobHandler {
 
     try {
       const directive = await this.orchestrationRepository.readDirective(job);
-      const result = await this.publicEvaluationService.evaluate(job);
+      const result = await this.publicEvaluationService.evaluate(job, {
+        reuseSameCursor: directive?.trigger === "SILENCE",
+      });
       if (result.commit.status === "SUPPRESSED_STALE_BASE") {
         if (result.commit.shouldRequeue) {
           await this.orchestrationRepository.refreshStaleJob(job);

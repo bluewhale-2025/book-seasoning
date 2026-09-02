@@ -36,7 +36,7 @@ const job: ClaimedAiJob = {
 };
 
 const handler = (
-  evaluate: () => Promise<unknown>,
+  evaluate: (...args: unknown[]) => Promise<unknown>,
   decideAndCommit: () => Promise<unknown> = () =>
     Promise.resolve({
       decision: PolicyWaitDecisionV1Fixture,
@@ -112,6 +112,36 @@ describe("AiJobRoutingHandler", () => {
     );
 
     await expect(subject.handle(job)).resolves.toEqual({ outcome: "SUCCEEDED" });
+  });
+
+  it("enables same-cursor reuse only for an explicit SILENCE trigger", async () => {
+    let evaluationOptions: unknown;
+    const subject = handler(
+      (_job, options) => {
+        evaluationOptions = options;
+        return Promise.resolve({
+          context: {},
+          output: {},
+          commit: {
+            status: "COMMITTED",
+            evaluationId: "a5000000-0000-4000-8000-000000000001",
+            committedWikiVersion: 2,
+          },
+        });
+      },
+      undefined,
+      undefined,
+      undefined,
+      {
+        trigger: "SILENCE",
+        hostHelpReason: null,
+        extensionPhaseVersion: null,
+        refreshNo: 0,
+      },
+    );
+
+    await expect(subject.handle(job)).resolves.toEqual({ outcome: "SUCCEEDED" });
+    expect(evaluationOptions).toEqual({ reuseSameCursor: true });
   });
 
   it("passes an explicit host-help trigger and reason to Policy", async () => {

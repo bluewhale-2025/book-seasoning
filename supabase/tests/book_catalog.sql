@@ -132,22 +132,43 @@ select set_config(
 set local role authenticated;
 
 select is(
-  (select count(*) from public.books),
+  (
+    select count(*) from public.books
+    where id in (
+      '21000000-0000-4000-8000-000000000001',
+      '21000000-0000-4000-8000-000000000002'
+    )
+  ),
   1::bigint,
   'authenticated users only see books with a published pack'
 );
 select is(
-  (select count(*) from public.book_context_pack_versions),
+  (
+    select count(*) from public.book_context_pack_versions
+    where id in (
+      '22000000-0000-4000-8000-000000000001',
+      '22000000-0000-4000-8000-000000000002'
+    )
+  ),
   1::bigint,
   'authenticated users only see published pack versions'
 );
 select is(
-  (select count(*) from public.published_book_catalog),
+  (
+    select count(*) from public.published_book_catalog
+    where book_id in (
+      '21000000-0000-4000-8000-000000000001',
+      '21000000-0000-4000-8000-000000000002'
+    )
+  ),
   1::bigint,
   'catalog only contains a published selection item'
 );
 select is(
-  (select short_description from public.published_book_catalog),
+  (
+    select short_description from public.published_book_catalog
+    where book_id = '21000000-0000-4000-8000-000000000001'
+  ),
   '공개된 소개',
   'catalog exposes the published short description'
 );
@@ -155,8 +176,11 @@ select is(
   (
     select count(*)
     from public.published_book_catalog
-    where title ilike '%공개%'
-       or author ilike '%공개%'
+    where book_id in (
+      '21000000-0000-4000-8000-000000000001',
+      '21000000-0000-4000-8000-000000000002'
+    )
+      and (title ilike '%공개%' or author ilike '%공개%')
   ),
   1::bigint,
   'catalog supports title and author search'

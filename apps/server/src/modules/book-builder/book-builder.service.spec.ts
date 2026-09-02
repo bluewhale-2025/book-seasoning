@@ -142,6 +142,13 @@ const providerRun: AiProviderRunV1 = {
   reasoningEffort: "medium",
   responseId: "response-1",
   latencyMs: 1,
+  requestMetrics: {
+    inputBytes: 10,
+    instructionsBytes: 5,
+    outputSchemaBytes: 20,
+    totalRequestBytes: 35,
+    maxOutputTokens: 12_000,
+  },
   usage: null,
 };
 

@@ -2,7 +2,7 @@ begin;
 
 set local search_path = public, extensions;
 
-select plan(36);
+select plan(47);
 
 select has_table('private', 'ai_host_help_requests', 'host-help requests have a private state table');
 select has_table('private', 'ai_orchestration_jobs', 'trigger directives have a private mapping table');
@@ -19,6 +19,10 @@ select has_function(
 select has_function(
   'private', 'refresh_ai_orchestration_job', array['uuid', 'integer'],
   'stale explicit work has a bounded refresh boundary'
+);
+select has_function(
+  'private', 'read_reusable_public_evaluation', array['uuid', 'integer'],
+  'same-cursor silence work has a provider-free evaluation lookup'
 );
 select has_function(
   'private', 'commit_ai_extension_opinion',
@@ -58,6 +62,31 @@ select ok(
     'EXECUTE'
   ),
   'the worker can refresh stale explicit work'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'private.read_reusable_public_evaluation(uuid,integer)',
+    'EXECUTE'
+  ),
+  'authenticated clients cannot read reusable evaluation internals'
+);
+select ok(
+  has_function_privilege(
+    'bookseasoning_ai_worker',
+    'private.read_reusable_public_evaluation(uuid,integer)',
+    'EXECUTE'
+  ),
+  'the worker can read a reusable evaluation for its claimed job'
+);
+select is(
+  (
+    select schedule
+    from cron.job
+    where jobname = 'bookseasoning-enqueue-due-ai-evaluations'
+  ),
+  '1 second',
+  'time-signal reconciliation runs with one-second scheduling resolution'
 );
 select ok(
   has_function_privilege(
@@ -367,7 +396,11 @@ insert into private.living_wiki_versions (
 ) values (
   'ac500000-0000-4000-8000-000000000001', 1, 'INCREMENTAL', null, 4,
   'living-wiki.v1', '{}'::jsonb,
-  (select job_id from private.ai_orchestration_jobs where trigger = 'MESSAGE_BATCH')
+  (
+    select job_id from private.ai_orchestration_jobs
+    where trigger = 'MESSAGE_BATCH'
+      and session_id = 'ac500000-0000-4000-8000-000000000001'
+  )
 );
 
 update public.session_runs set last_message_seq = 5
@@ -411,6 +444,7 @@ set status = 'SUCCEEDED', attempt_count = 1,
 where id = (
   select job_id from private.ai_orchestration_jobs
   where trigger = 'PARTICIPATION_THRESHOLD'
+    and session_id = 'ac500000-0000-4000-8000-000000000001'
 );
 insert into private.living_wiki_versions (
   session_id, version, kind, base_version, based_through_seq,
@@ -418,7 +452,11 @@ insert into private.living_wiki_versions (
 ) values (
   'ac500000-0000-4000-8000-000000000001', 2, 'INCREMENTAL', 1, 6,
   'living-wiki.v1', '{}'::jsonb,
-  (select job_id from private.ai_orchestration_jobs where trigger = 'PARTICIPATION_THRESHOLD')
+  (
+    select job_id from private.ai_orchestration_jobs
+    where trigger = 'PARTICIPATION_THRESHOLD'
+      and session_id = 'ac500000-0000-4000-8000-000000000001'
+  )
 );
 update public.session_runs set last_message_seq = 7, started_at = '2030-01-01T08:50:00Z'
 where id = 'ac500000-0000-4000-8000-000000000001';
@@ -452,12 +490,26 @@ update private.ai_job_runs
 set status = 'SUCCEEDED', attempt_count = 1,
     started_at = created_at, completed_at = created_at,
     lease_expires_at = null, updated_at = created_at
-where id = (select job_id from private.ai_orchestration_jobs where trigger = 'TOPIC_DURATION');
+where id = (
+  select job_id from private.ai_orchestration_jobs
+  where trigger = 'TOPIC_DURATION'
+    and session_id = 'ac500000-0000-4000-8000-000000000001'
+);
+update private.ai_orchestration_jobs
+set created_at = '2030-01-01T09:10:00Z'
+where trigger = 'TOPIC_DURATION'
+  and session_id = 'ac500000-0000-4000-8000-000000000001';
+select ok(
+  not private.enqueue_ai_evaluation_if_due(
+    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:10:59Z', true
+  ),
+  '59 seconds of silence is still below the evaluation threshold'
+);
 select ok(
   private.enqueue_ai_evaluation_if_due(
-    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:11:01Z', true
+    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:11:00Z', true
   ),
-  'a 60-second silence becomes an evaluation candidate'
+  'exactly 60 seconds of silence becomes an evaluation candidate'
 );
 select is(
   (
@@ -475,6 +527,209 @@ select ok(
   'the same silence window does not enqueue duplicate active work'
 );
 
+update private.ai_job_runs
+set status = 'SUCCEEDED', attempt_count = 1,
+    started_at = created_at, completed_at = created_at,
+    lease_expires_at = null, updated_at = created_at
+where id = (
+  select job_id from private.ai_orchestration_jobs
+  where trigger = 'SILENCE'
+    and session_id = 'ac500000-0000-4000-8000-000000000001'
+);
+insert into private.ai_evaluations (
+  id, job_id, session_id, base_wiki_version, committed_wiki_version,
+  target_through_seq, schema_version, canonical_result, commit_status,
+  validation_code, created_at
+) values (
+  'aca00000-0000-4000-8000-000000000001',
+  (
+    select job_id from private.ai_orchestration_jobs
+    where trigger = 'SILENCE'
+      and session_id = 'ac500000-0000-4000-8000-000000000001'
+  ),
+  'ac500000-0000-4000-8000-000000000001', 2, null, 7,
+  'public-evaluator-output.v1', '{}'::jsonb, 'PATCH_REJECTED',
+  'TEST_FIXTURE', '2030-01-01T09:11:30Z'
+);
+insert into private.ai_policy_actions (
+  id, evaluation_id, session_id, action, reason_codes,
+  supporting_evidence_refs, schema_version, trigger, created_at
+) values (
+  'acb00000-0000-4000-8000-000000000001',
+  'aca00000-0000-4000-8000-000000000001',
+  'ac500000-0000-4000-8000-000000000001', 'REVIVE',
+  '["TEST_SILENCE_INTERVENTION"]'::jsonb, '[]'::jsonb,
+  'policy-decision.v1', 'SILENCE', '2030-01-01T09:11:31Z'
+);
+update public.session_runs set last_message_seq = 8
+where id = 'ac500000-0000-4000-8000-000000000001';
+insert into public.messages (
+  id, session_id, seq_no, kind, ai_attribution, author_user_id,
+  author_profile_name_snapshot, client_message_id, body, confirmed_at, created_at
+) values (
+  'acc00000-0000-4000-8000-000000000001',
+  'ac500000-0000-4000-8000-000000000001', 8, 'AI_HOST', 'AUTOMATIC',
+  null, 'AI Host', null, '테스트 자동 개입',
+  '2030-01-01T09:12:00Z', '2030-01-01T09:12:00Z'
+);
+insert into private.ai_interventions (
+  policy_action_id, session_id, message_id, based_through_seq,
+  schema_version, canonical_output, status, phase_transitioned,
+  created_at, committed_at
+) values (
+  'acb00000-0000-4000-8000-000000000001',
+  'ac500000-0000-4000-8000-000000000001',
+  'acc00000-0000-4000-8000-000000000001', 7,
+  'host-intervention-output.v1', '{}'::jsonb, 'COMMITTED', false,
+  '2030-01-01T09:12:00Z', '2030-01-01T09:12:00Z'
+);
+select ok(
+  not private.enqueue_ai_evaluation_if_due(
+    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:13:40Z', true
+  ),
+  'time signals stay suppressed until a participant responds to the last AI intervention'
+);
+
+update public.session_runs set last_message_seq = 9
+where id = 'ac500000-0000-4000-8000-000000000001';
+insert into public.messages (
+  id, session_id, seq_no, kind, author_user_id,
+  author_profile_name_snapshot, client_message_id, body, confirmed_at, created_at
+) values (
+  'ac800009-0000-4000-8000-000000000001',
+  'ac500000-0000-4000-8000-000000000001', 9, 'PARTICIPANT',
+  'ac100000-0000-4000-8000-000000000001', 'Orchestration 방장',
+  'ac900009-0000-4000-8000-000000000001', 'AI 개입 뒤의 새 응답',
+  '2030-01-01T09:12:05Z', '2030-01-01T09:12:05Z'
+);
+select ok(
+  not private.enqueue_ai_evaluation_if_due(
+    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:13:10Z', true
+  ),
+  'time signals do not spend a provider call while automatic intervention cooldown is active'
+);
+select ok(
+  private.enqueue_ai_evaluation_if_due(
+    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:13:40Z', true
+  ),
+  'silence evaluation resumes after a participant response and the cooldown window'
+);
+update private.ai_job_runs
+set status = 'SUCCEEDED', attempt_count = 1,
+    started_at = created_at, completed_at = created_at,
+    lease_expires_at = null, updated_at = created_at
+where id = (
+  select directive.job_id
+  from private.ai_orchestration_jobs as directive
+  join private.ai_job_runs as job on job.id = directive.job_id
+  where directive.trigger = 'SILENCE'
+    and directive.session_id = 'ac500000-0000-4000-8000-000000000001'
+    and job.target_through_seq = 9
+);
+
+insert into private.living_wiki_versions (
+  session_id, version, kind, base_version, based_through_seq,
+  schema_version, document, source_job_id, created_at
+) values (
+  'ac500000-0000-4000-8000-000000000001', 3, 'INCREMENTAL', 2, 9,
+  'living-wiki.v1', '{}'::jsonb,
+  (
+    select directive.job_id
+    from private.ai_orchestration_jobs as directive
+    join private.ai_job_runs as job on job.id = directive.job_id
+    where directive.trigger = 'SILENCE'
+      and directive.session_id = 'ac500000-0000-4000-8000-000000000001'
+      and job.target_through_seq = 9
+  ),
+  '2030-01-01T09:13:41Z'
+);
+insert into private.ai_evaluations (
+  job_id, session_id, base_wiki_version, committed_wiki_version,
+  target_through_seq, schema_version, canonical_result, commit_status,
+  validation_code, created_at
+) values (
+  (
+    select directive.job_id
+    from private.ai_orchestration_jobs as directive
+    join private.ai_job_runs as job on job.id = directive.job_id
+    where directive.trigger = 'SILENCE'
+      and directive.session_id = 'ac500000-0000-4000-8000-000000000001'
+      and job.target_through_seq = 9
+  ),
+  'ac500000-0000-4000-8000-000000000001', 2, 3, 9,
+  'public-evaluator-output.v1', '{"fixture":"REUSABLE_SAME_CURSOR"}'::jsonb,
+  'COMMITTED', null, '2030-01-01T09:13:41Z'
+);
+select ok(
+  private.enqueue_ai_evaluation_if_due(
+    'ac500000-0000-4000-8000-000000000001', '2030-01-01T09:15:11Z', true
+  ),
+  'a later silence cycle can be enqueued at the already evaluated cursor'
+);
+update private.ai_job_runs
+set status = 'PROCESSING', attempt_count = 1,
+    started_at = '2026-09-03T00:00:00Z',
+    lease_expires_at = '2030-01-01T10:00:00Z',
+    updated_at = '2026-09-03T00:00:00Z'
+where id = (
+  select directive.job_id
+  from private.ai_orchestration_jobs as directive
+  join private.ai_job_runs as job on job.id = directive.job_id
+  where directive.trigger = 'SILENCE'
+    and directive.session_id = 'ac500000-0000-4000-8000-000000000001'
+    and job.base_wiki_version = 3
+    and job.target_through_seq = 9
+);
+select is(
+  (
+    select canonical_result ->> 'fixture'
+    from private.read_reusable_public_evaluation(
+      (
+        select directive.job_id
+        from private.ai_orchestration_jobs as directive
+        join private.ai_job_runs as job on job.id = directive.job_id
+        where directive.trigger = 'SILENCE'
+          and directive.session_id = 'ac500000-0000-4000-8000-000000000001'
+          and job.base_wiki_version = 3
+          and job.target_through_seq = 9
+      ),
+      1
+    )
+  ),
+  'REUSABLE_SAME_CURSOR',
+  'a claimed silence job reuses the committed evaluation covering its exact cursor'
+);
+update public.session_runs set last_message_seq = 10
+where id = 'ac500000-0000-4000-8000-000000000001';
+select is(
+  (
+    select count(*)
+    from private.read_reusable_public_evaluation(
+      (
+        select directive.job_id
+        from private.ai_orchestration_jobs as directive
+        join private.ai_job_runs as job on job.id = directive.job_id
+        where directive.trigger = 'SILENCE'
+          and directive.session_id = 'ac500000-0000-4000-8000-000000000001'
+          and job.base_wiki_version = 3
+          and job.target_through_seq = 9
+      ),
+      1
+    )
+  ),
+  0::bigint,
+  'same-cursor reuse fails closed after the authoritative message cursor advances'
+);
+update public.session_runs set last_message_seq = 9
+where id = 'ac500000-0000-4000-8000-000000000001';
+update private.ai_job_runs
+set status = 'SUCCEEDED', completed_at = '2026-09-03T00:00:01Z',
+    lease_expires_at = null, updated_at = '2026-09-03T00:00:01Z'
+where session_id = 'ac500000-0000-4000-8000-000000000001'
+  and job_type = 'PUBLIC_EVALUATION'
+  and base_wiki_version = 3
+  and target_through_seq = 9;
+
 update public.session_runs
 set phase_version = 2,
     extension_prompted_at = '2030-01-01T09:23:00Z',
@@ -485,6 +740,7 @@ select is(
     select count(*) from private.ai_orchestration_jobs
     where trigger = 'EXTENSION_DECISION'
       and extension_phase_version = 2
+      and session_id = 'ac500000-0000-4000-8000-000000000001'
   ),
   1::bigint,
   'opening the seven-minute window atomically enqueues extension evaluation'
@@ -518,6 +774,7 @@ where id = (
   select job_id from private.ai_orchestration_jobs
   where trigger = 'EXTENSION_DECISION'
     and extension_phase_version = 2
+    and session_id = 'ac500000-0000-4000-8000-000000000001'
 );
 
 set local role authenticated;

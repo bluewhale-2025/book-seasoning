@@ -140,7 +140,7 @@ select * from private.commit_public_evaluation_candidate(
 
 select is(
   (select evaluation_id from first_commit),
-  (select id from private.ai_evaluations limit 1),
+  (select id from private.ai_evaluations where job_id = (select job_id from first_claim)),
   'the commit returns the immutable evaluation identity'
 );
 select is(
@@ -159,17 +159,26 @@ select is(
   'the first evaluation always writes a Wiki version'
 );
 select is(
-  (select count(*) from private.living_wiki_versions),
+  (
+    select count(*) from private.living_wiki_versions
+    where session_id = 'f5000000-0000-4000-8000-000000000001'
+  ),
   1::bigint,
   'the first commit stores one immutable Wiki row'
 );
 select is(
-  (select commit_status from private.ai_evaluations),
+  (
+    select commit_status from private.ai_evaluations
+    where job_id = (select job_id from first_claim)
+  ),
   'COMMITTED',
   'Wiki and evaluation commit in the same function'
 );
 select is(
-  (select document ->> 'marker' from private.living_wiki_versions),
+  (
+    select document ->> 'marker' from private.living_wiki_versions
+    where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 1
+  ),
   'v1',
   'the canonical candidate is retained'
 );
@@ -200,12 +209,18 @@ select is(
   'a lost-response retry returns the original commit outcome'
 );
 select is(
-  (select count(*) from private.living_wiki_versions),
+  (
+    select count(*) from private.living_wiki_versions
+    where session_id = 'f5000000-0000-4000-8000-000000000001'
+  ),
   1::bigint,
   'idempotent replay creates no second Wiki version'
 );
 select is(
-  (select count(*) from private.ai_evaluations),
+  (
+    select count(*) from private.ai_evaluations
+    where session_id = 'f5000000-0000-4000-8000-000000000001'
+  ),
   1::bigint,
   'idempotent replay creates no second evaluation'
 );
@@ -266,12 +281,18 @@ select is((select commit_status from second_commit), 'COMMITTED', 'a fresh base 
 select is((select committed_wiki_version from second_commit), 2, 'the version advances exactly once');
 select is((select current_based_through_seq from second_commit), 2::bigint, 'the committed cursor advances');
 select is(
-  (select base_version from private.living_wiki_versions where version = 2),
+  (
+    select base_version from private.living_wiki_versions
+    where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 2
+  ),
   1,
   'a new Wiki version points to its immediate predecessor'
 );
 select is(
-  (select count(*) from private.ai_evaluations),
+  (
+    select count(*) from private.ai_evaluations
+    where session_id = 'f5000000-0000-4000-8000-000000000001'
+  ),
   2::bigint,
   'the second version has one committed evaluation'
 );
@@ -320,7 +341,11 @@ select is((select commit_status from stale_new_commit), 'SUPPRESSED_STALE_BASE',
 select is((select committed_wiki_version from stale_new_commit), null, 'a stale evaluation commits no Wiki pointer');
 select is((select current_wiki_version from stale_new_commit), 2, 'stale suppression reports the winning version');
 select is((select should_requeue from stale_new_commit), true, 'an uncovered newer cursor recommends re-evaluation');
-select is((select count(*) from private.living_wiki_versions), 2::bigint, 'a stale candidate cannot overwrite or append Wiki state');
+select is(
+  (select count(*) from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001'),
+  2::bigint,
+  'a stale candidate cannot overwrite or append Wiki state'
+);
 select is(
   (select validation_code from private.ai_evaluations where job_id = (select job_id from stale_new_claim)),
   'LIVING_WIKI_STALE_BASE',
@@ -399,7 +424,7 @@ select * from private.commit_living_wiki_candidate(
   (select job_id from noop_claim),
   (select attempt_no from noop_claim),
   'INCREMENTAL', 2, 2, 'living-wiki.v1',
-  (select document from private.living_wiki_versions where version = 2),
+  (select document from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 2),
   'public-evaluator-output.v1',
   '{
     "schemaVersion":"public-evaluator-output.v1",
@@ -411,7 +436,11 @@ select * from private.commit_living_wiki_candidate(
 select is((select commit_status from noop_commit), 'COMMITTED', 'a no-change evaluation still commits');
 select is((select wrote_wiki_version from noop_commit), false, 'a no-change same-cursor evaluation does not rewrite Wiki JSON');
 select is((select committed_wiki_version from noop_commit), 2, 'the no-change evaluation reuses the current Wiki version');
-select is((select count(*) from private.living_wiki_versions), 2::bigint, 'no-op evaluation causes no version churn');
+select is(
+  (select count(*) from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001'),
+  2::bigint,
+  'no-op evaluation causes no version churn'
+);
 do $$
 begin
   perform private.complete_ai_job(
@@ -490,10 +519,18 @@ select * from private.commit_living_wiki_candidate(
 select is((select commit_status from checkpoint_commit), 'COMMITTED', 'a preserving checkpoint commits');
 select is((select wrote_wiki_version from checkpoint_commit), true, 'a checkpoint always creates an explicit version');
 select is((select committed_wiki_version from checkpoint_commit), 3, 'the checkpoint becomes the next version');
-select is((select kind from private.living_wiki_versions where version = 3), 'TOPIC_CHECKPOINT', 'the semantic checkpoint kind is durable');
-select is((select base_version from private.living_wiki_versions where version = 3), 2, 'the checkpoint retains its exact base');
 select is(
-  (select document #>> '{coverage,0,subjectId}' from private.living_wiki_versions where version = 3),
+  (select kind from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 3),
+  'TOPIC_CHECKPOINT',
+  'the semantic checkpoint kind is durable'
+);
+select is(
+  (select base_version from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 3),
+  2,
+  'the checkpoint retains its exact base'
+);
+select is(
+  (select document #>> '{coverage,0,subjectId}' from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 3),
   'fa000000-0000-4000-8000-000000000001',
   'the previous topic coverage survives the topic pointer transition'
 );
@@ -503,7 +540,7 @@ select * from private.commit_living_wiki_candidate(
   (select job_id from checkpoint_claim),
   (select attempt_no from checkpoint_claim),
   'TOPIC_CHECKPOINT', 2, 4, 'living-wiki.v1',
-  (select document from private.living_wiki_versions where version = 3),
+  (select document from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001' and version = 3),
   'public-evaluator-output.v1',
   '{
     "schemaVersion":"public-evaluator-output.v1",
@@ -513,8 +550,16 @@ select * from private.commit_living_wiki_candidate(
   }'::jsonb
 );
 select is((select commit_status from checkpoint_replay), 'COMMITTED', 'checkpoint retry is idempotent');
-select is((select count(*) from private.living_wiki_versions), 3::bigint, 'checkpoint retry creates no duplicate version');
-select is((select count(*) from private.ai_evaluations), 6::bigint, 'each logical job has at most one evaluation');
+select is(
+  (select count(*) from private.living_wiki_versions where session_id = 'f5000000-0000-4000-8000-000000000001'),
+  3::bigint,
+  'checkpoint retry creates no duplicate version'
+);
+select is(
+  (select count(*) from private.ai_evaluations where session_id = 'f5000000-0000-4000-8000-000000000001'),
+  6::bigint,
+  'each logical job has at most one evaluation'
+);
 do $$
 begin
   perform private.complete_ai_job(

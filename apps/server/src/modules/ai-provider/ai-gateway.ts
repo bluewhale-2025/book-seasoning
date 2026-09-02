@@ -1,6 +1,7 @@
 import type { z } from "zod";
 
 import type {
+  AiProviderRequestMetricsV1,
   AiProviderRunV1,
   AiReasoningEffort,
   AiTaskAlias,
@@ -36,6 +37,7 @@ export type AiGatewayFailureRun = Readonly<{
   model: string;
   reasoningEffort: AiReasoningEffort;
   latencyMs: number;
+  requestMetrics: AiProviderRequestMetricsV1;
 }>;
 
 export interface AiGateway {

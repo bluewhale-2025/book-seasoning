@@ -16,6 +16,8 @@ import {
 
 const SURROUNDING_MESSAGE_COUNT = 6;
 const MAX_CONTEXT_MESSAGES = 200;
+const BOOK_RELEVANCE_MESSAGE_COUNT = 6;
+export const EVALUATOR_BOOK_ITEM_BUDGET = 8;
 
 export type BuildPublicContextInput = Readonly<{
   sessionId: string;
@@ -53,19 +55,24 @@ export class PublicContextBuilder {
             limit: MAX_CONTEXT_MESSAGES + 1,
           });
 
-    const [messages, publicPrep, bookContext] = await Promise.all([
+    const [messages, publicPrep] = await Promise.all([
       messagePromise,
       this.repository.listPublicPrep({ sessionId: input.sessionId }),
-      this.bookContextProvider.getPackVersion({
-        packVersionId: frame.session.pinnedPackVersionId,
-        consumer: "EVALUATOR",
-        maxItems: Number.MAX_SAFE_INTEGER,
-      }),
     ]);
 
     if (messages.length > MAX_CONTEXT_MESSAGES) {
       throw new PublicContextBuildError("PUBLIC_CONTEXT_MESSAGE_BUDGET_EXCEEDED");
     }
+    const bookContext = await this.bookContextProvider.getPackVersion({
+      packVersionId: frame.session.pinnedPackVersionId,
+      consumer: "EVALUATOR",
+      query: this.bookRelevanceQuery(frame, messages),
+      preferredItemIds:
+        frame.baseWiki?.document.bookGrounding.map(
+          (grounding) => grounding.bookContextItemRef.itemId,
+        ) ?? [],
+      maxItems: EVALUATOR_BOOK_ITEM_BUDGET,
+    });
     if (bookContext.packVersionId !== frame.session.pinnedPackVersionId) {
       throw new PublicContextBuildError("PUBLIC_CONTEXT_PACK_VERSION_MISMATCH");
     }
@@ -108,5 +115,22 @@ export class PublicContextBuilder {
         ? nextUnseenSeq
         : Math.max(1, targetThroughSeq);
     return Math.max(1, anchor - SURROUNDING_MESSAGE_COUNT);
+  }
+
+  private bookRelevanceQuery(
+    frame: Awaited<ReturnType<PublicContextRepository["loadFrame"]>>,
+    messages: readonly PublicContextV1["messages"][number][],
+  ): string {
+    const wiki = frame.baseWiki?.document;
+    return [
+      wiki?.currentTopic?.title,
+      wiki?.currentTopic?.guidingQuestion,
+      ...messages.slice(-BOOK_RELEVANCE_MESSAGE_COUNT).map((message) => message.body),
+      ...(wiki?.perspectiveMap.map((perspective) => perspective.summary) ?? []),
+      ...(wiki?.bookGrounding.map((grounding) => grounding.summary) ?? []),
+    ]
+      .filter((value): value is string => value !== null && value !== undefined)
+      .join("\n")
+      .slice(0, 4_000);
   }
 }

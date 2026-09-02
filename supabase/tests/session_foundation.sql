@@ -288,7 +288,11 @@ insert into public.session_events (
   );
 
 select is(
-  (select count(*) from public.session_events where aggregate_version = 1),
+  (
+    select count(*) from public.session_events
+    where session_id = '70400000-0000-4000-8000-000000000001'
+      and aggregate_version = 1
+  ),
   2::bigint,
   'one aggregate commit may produce more than one ordered public event'
 );

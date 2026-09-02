@@ -2,7 +2,12 @@ begin;
 
 set local search_path = public, extensions;
 
-select plan(15);
+select plan(22);
+
+select has_column(
+  'private', 'ai_provider_runs', 'request_metrics',
+  'provider diagnostics retain content-free request sizing metadata'
+);
 
 select has_function(
   'private',
@@ -20,6 +25,31 @@ select ok(
     'EXECUTE'
   ),
   'the worker retains provider diagnostic write access'
+);
+select has_function(
+  'private',
+  'record_ai_provider_run',
+  array[
+    'uuid', 'integer', 'text', 'text', 'text', 'text', 'text', 'text',
+    'text', 'text', 'integer', 'jsonb', 'text', 'jsonb'
+  ],
+  'the request-metrics provider diagnostic boundary exists'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'private.record_ai_provider_run(uuid,integer,text,text,text,text,text,text,text,text,integer,jsonb,text,jsonb)',
+    'EXECUTE'
+  ),
+  'authenticated clients cannot write request metrics'
+);
+select ok(
+  has_function_privilege(
+    'bookseasoning_ai_worker',
+    'private.record_ai_provider_run(uuid,integer,text,text,text,text,text,text,text,text,integer,jsonb,text,jsonb)',
+    'EXECUTE'
+  ),
+  'the worker can write request metrics'
 );
 
 insert into auth.users (id, email, aud, role, raw_user_meta_data)
@@ -81,7 +111,8 @@ insert into private.ai_job_runs (
   ('ea600000-0000-4000-8000-000000000004', 'alias:final:succeeded', 'ai-record', 'FINAL_WIKI', 'ea500000-0000-4000-8000-000000000001', 0, 0, 'public-evaluator-output.v1', 'PROCESSING', 1, timezone('utc', now()) + interval '5 minutes', timezone('utc', now())),
   ('ea600000-0000-4000-8000-000000000005', 'alias:synthesis:succeeded', 'ai-record', 'SYNTHESIS', 'ea500000-0000-4000-8000-000000000001', 0, 0, 'synthesis-output.v1', 'PROCESSING', 1, timezone('utc', now()) + interval '5 minutes', timezone('utc', now())),
   ('ea600000-0000-4000-8000-000000000006', 'alias:record:succeeded', 'ai-record', 'DISCUSSION_RECORD', 'ea500000-0000-4000-8000-000000000001', 0, 0, 'discussion-record-output.v1', 'PROCESSING', 1, timezone('utc', now()) + interval '5 minutes', timezone('utc', now())),
-  ('ea600000-0000-4000-8000-000000000007', 'alias:unknown', 'ai-record', 'FINAL_WIKI', 'ea500000-0000-4000-8000-000000000001', 0, 0, 'public-evaluator-output.v1', 'PROCESSING', 1, timezone('utc', now()) + interval '5 minutes', timezone('utc', now()));
+  ('ea600000-0000-4000-8000-000000000007', 'alias:unknown', 'ai-record', 'FINAL_WIKI', 'ea500000-0000-4000-8000-000000000001', 0, 0, 'public-evaluator-output.v1', 'PROCESSING', 1, timezone('utc', now()) + interval '5 minutes', timezone('utc', now())),
+  ('ea600000-0000-4000-8000-000000000008', 'alias:incremental:metrics', 'ai-session', 'PUBLIC_EVALUATION', 'ea500000-0000-4000-8000-000000000001', 0, 0, 'public-evaluator-output.v1', 'PROCESSING', 1, timezone('utc', now()) + interval '5 minutes', timezone('utc', now()));
 
 insert into private.ai_job_attempts (
   job_id, attempt_no, queue_read_count, lease_expires_at
@@ -90,7 +121,7 @@ select id, 1, 1, lease_expires_at
 from private.ai_job_runs
 where id between
   'ea600000-0000-4000-8000-000000000001'::uuid
-  and 'ea600000-0000-4000-8000-000000000007'::uuid;
+  and 'ea600000-0000-4000-8000-000000000008'::uuid;
 
 select lives_ok(
   $$select private.record_ai_provider_run('ea600000-0000-4000-8000-000000000001', 1, 'PUBLIC_EVALUATOR_FINAL_V1', 'public-evaluator.v2', 'public-evaluator-output.v1', 'OPENAI', 'evaluator-model', 'low', 'FAILED', null, 20, null, 'AI_PROVIDER_TIMEOUT')$$,
@@ -116,15 +147,19 @@ select lives_ok(
   $$select private.record_ai_provider_run('ea600000-0000-4000-8000-000000000006', 1, 'DISCUSSION_RECORD_V1', 'discussion-record.v1', 'discussion-record-output.v1', 'OPENAI', 'host-model', 'medium', 'SUCCEEDED', 'resp-record', 25, '{"inputTokens":1,"outputTokens":1,"reasoningTokens":0,"totalTokens":2}'::jsonb, null)$$,
   'discussion record provider successes can be recorded'
 );
+select lives_ok(
+  $$select private.record_ai_provider_run('ea600000-0000-4000-8000-000000000008', 1, 'PUBLIC_EVALUATOR_INCREMENTAL_V1', 'public-evaluator.v5', 'public-evaluator-output.v1', 'OPENAI', 'evaluator-model', 'low', 'SUCCEEDED', 'resp-incremental', 25, '{"inputTokens":12,"cachedInputTokens":4,"outputTokens":3,"reasoningTokens":1,"totalTokens":15}'::jsonb, null, '{"inputBytes":1000,"instructionsBytes":200,"outputSchemaBytes":300,"totalRequestBytes":1500,"maxOutputTokens":6000}'::jsonb)$$,
+  'incremental evaluator request metrics can be recorded'
+);
 
 select is(
   (select count(*) from private.ai_provider_runs where job_id::text like 'ea600000-%'),
-  6::bigint,
-  'all six supported terminal-task provider runs are retained'
+  7::bigint,
+  'all seven supported provider runs are retained'
 );
 select set_eq(
   $$select distinct task_alias from private.ai_provider_runs where job_id::text like 'ea600000-%'$$,
-  $$values ('PUBLIC_EVALUATOR_FINAL_V1'::text), ('SYNTHESIS_V1'::text), ('DISCUSSION_RECORD_V1'::text)$$,
+  $$values ('PUBLIC_EVALUATOR_FINAL_V1'::text), ('PUBLIC_EVALUATOR_INCREMENTAL_V1'::text), ('SYNTHESIS_V1'::text), ('DISCUSSION_RECORD_V1'::text)$$,
   'provider diagnostics retain every terminal task alias'
 );
 select is(
@@ -134,7 +169,7 @@ select is(
 );
 select is(
   (select count(*) from private.ai_provider_runs where job_id::text like 'ea600000-%' and status = 'SUCCEEDED'),
-  3::bigint,
+  4::bigint,
   'success diagnostics retain canonical metadata rows'
 );
 select ok(
@@ -154,6 +189,24 @@ select ok(
       and canonical_run is null
   ),
   'successful diagnostics retain canonical provider metadata'
+);
+select is(
+  (
+    select request_metrics ->> 'outputSchemaBytes'
+    from private.ai_provider_runs
+    where job_id = 'ea600000-0000-4000-8000-000000000008'
+  ),
+  '300',
+  'request metrics are stored without prompt or response content'
+);
+select is(
+  (
+    select canonical_run #>> '{requestMetrics,maxOutputTokens}'
+    from private.ai_provider_runs
+    where job_id = 'ea600000-0000-4000-8000-000000000008'
+  ),
+  '6000',
+  'successful canonical provider metadata includes its output budget'
 );
 select throws_ok(
   $$select private.record_ai_provider_run('ea600000-0000-4000-8000-000000000007', 1, 'UNKNOWN_TASK_V1', 'unknown.v1', 'unknown-output.v1', 'OPENAI', 'test-model', 'low', 'FAILED', null, 1, null, 'AI_PROVIDER_TIMEOUT')$$,

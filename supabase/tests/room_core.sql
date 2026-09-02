@@ -85,7 +85,11 @@ from public.create_room(
 
 reset role;
 
-select is((select count(*) from public.rooms), 1::bigint, 'one room was created');
+select is(
+  (select count(*) from public.rooms where id = (select room_id from created_room_result)),
+  1::bigint,
+  'one room was created'
+);
 select is(
   (select duplicate from duplicate_room_result),
   true,
@@ -96,34 +100,54 @@ select is(
   (select room_id from created_room_result),
   'duplicate command returns the original room'
 );
-select is((select title from public.rooms), '첫 번째 방', 'room title is trimmed');
 select is(
-  (select host_user_id from public.rooms),
+  (select title from public.rooms where id = (select room_id from created_room_result)),
+  '첫 번째 방',
+  'room title is trimmed'
+);
+select is(
+  (select host_user_id from public.rooms where id = (select room_id from created_room_result)),
   '30000000-0000-4000-8000-000000000001'::uuid,
   'authenticated actor becomes the host'
 );
 select is(
-  (select count(*) from public.room_memberships where status = 'REGISTERED'),
+  (
+    select count(*) from public.room_memberships
+    where room_id = (select room_id from created_room_result)
+      and status = 'REGISTERED'
+  ),
   1::bigint,
   'host membership is created atomically'
 );
 select is(
-  (select profile_name_snapshot from public.room_memberships),
+  (
+    select profile_name_snapshot from public.room_memberships
+    where room_id = (select room_id from created_room_result)
+  ),
   '방장 이름',
   'host membership snapshots the current profile name'
 );
 select is(
-  (select phase from public.session_runs),
+  (
+    select phase from public.session_runs
+    where room_id = (select room_id from created_room_result)
+  ),
   'SCHEDULED',
   'scheduled session is created atomically'
 );
 select is(
-  (select participant_count from public.search_rooms('방을 위한 책', 20)),
+  (
+    select participant_count from public.search_rooms('방을 위한 책', 20)
+    where room_id = (select room_id from created_room_result)
+  ),
   1::bigint,
   'room search includes the host in participant count'
 );
 select is(
-  (select availability from public.search_rooms('', 20)),
+  (
+    select availability from public.search_rooms('', 20)
+    where room_id = (select room_id from created_room_result)
+  ),
   'OPEN',
   'room search reports capacity separately from phase'
 );

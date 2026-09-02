@@ -33,6 +33,14 @@ export const AiTaskAliasSchema = z.enum([
 
 export const AiReasoningEffortSchema = z.enum(["none", "low", "medium"]);
 
+export const AiProviderRequestMetricsV1Schema = z.strictObject({
+  inputBytes: z.int().nonnegative(),
+  instructionsBytes: z.int().nonnegative(),
+  outputSchemaBytes: z.int().nonnegative(),
+  totalRequestBytes: z.int().nonnegative(),
+  maxOutputTokens: z.int().positive(),
+});
+
 export const AiProviderRunV1Schema = z.strictObject({
   schemaVersion: z.literal("ai-provider-run.v1"),
   taskAlias: AiTaskAliasSchema,
@@ -51,9 +59,11 @@ export const AiProviderRunV1Schema = z.strictObject({
   reasoningEffort: AiReasoningEffortSchema,
   responseId: z.string().min(1).max(200),
   latencyMs: z.int().nonnegative(),
+  requestMetrics: AiProviderRequestMetricsV1Schema,
   usage: z
     .strictObject({
       inputTokens: z.int().nonnegative(),
+      cachedInputTokens: z.int().nonnegative().optional(),
       outputTokens: z.int().nonnegative(),
       reasoningTokens: z.int().nonnegative(),
       totalTokens: z.int().nonnegative(),
@@ -143,6 +153,9 @@ export const HostContextV1Schema = z
 
 export type AiTaskAlias = z.infer<typeof AiTaskAliasSchema>;
 export type AiReasoningEffort = z.infer<typeof AiReasoningEffortSchema>;
+export type AiProviderRequestMetricsV1 = z.infer<
+  typeof AiProviderRequestMetricsV1Schema
+>;
 export type AiProviderRunV1 = z.infer<typeof AiProviderRunV1Schema>;
 export type OpeningContextV1 = z.infer<typeof OpeningContextV1Schema>;
 export type HostContextV1 = z.infer<typeof HostContextV1Schema>;

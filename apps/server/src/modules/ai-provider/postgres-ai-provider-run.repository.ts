@@ -32,7 +32,8 @@ export class PostgresAiProviderRunRepository
         ${input.run.responseId},
         ${input.run.latencyMs},
         ${input.run.usage}::jsonb,
-        ${null}
+        ${null},
+        ${input.run.requestMetrics}::jsonb
       )
     `);
   }
@@ -52,7 +53,8 @@ export class PostgresAiProviderRunRepository
         ${null},
         ${input.run.latencyMs},
         ${null}::jsonb,
-        ${input.errorCode}
+        ${input.errorCode},
+        ${input.run.requestMetrics}::jsonb
       )
     `);
   }

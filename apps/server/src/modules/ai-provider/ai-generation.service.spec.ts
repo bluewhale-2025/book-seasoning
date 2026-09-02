@@ -38,6 +38,13 @@ const successRun: AiProviderRunV1 = AiProviderRunV1Schema.parse({
   reasoningEffort: "low",
   responseId: "resp_test",
   latencyMs: 20,
+  requestMetrics: {
+    inputBytes: 10,
+    instructionsBytes: 4,
+    outputSchemaBytes: 20,
+    totalRequestBytes: 34,
+    maxOutputTokens: 10,
+  },
   usage: {
     inputTokens: 1,
     outputTokens: 1,
@@ -54,6 +61,13 @@ const failureRun: AiGatewayFailureRun = {
   model: "evaluator-model",
   reasoningEffort: "low",
   latencyMs: 20,
+  requestMetrics: {
+    inputBytes: 10,
+    instructionsBytes: 4,
+    outputSchemaBytes: 20,
+    totalRequestBytes: 34,
+    maxOutputTokens: 10,
+  },
 };
 
 const correlation = {

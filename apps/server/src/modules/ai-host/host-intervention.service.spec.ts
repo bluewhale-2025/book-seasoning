@@ -28,6 +28,13 @@ const providerRun = {
   reasoningEffort: "low" as const,
   responseId: "resp_host_test",
   latencyMs: 25,
+  requestMetrics: {
+    inputBytes: 10,
+    instructionsBytes: 5,
+    outputSchemaBytes: 20,
+    totalRequestBytes: 35,
+    maxOutputTokens: 1_500,
+  },
   usage: null,
 };
 
@@ -94,6 +101,13 @@ describe("HostInterventionService", () => {
       model: providerRun.model,
       reasoningEffort: providerRun.reasoningEffort,
       latencyMs: providerRun.latencyMs,
+      requestMetrics: {
+        inputBytes: 10,
+        instructionsBytes: 10,
+        outputSchemaBytes: 10,
+        totalRequestBytes: 30,
+        maxOutputTokens: 1_500,
+      },
     };
     const subject = new HostInterventionService(
       new HostContextBuilder(),

@@ -13,8 +13,18 @@ export type PublicEvaluatorPromptInput = Readonly<{
     baseWikiVersion: number;
     targetThroughSeq: number;
   }>;
-  allowedEvidenceRefs: readonly PublicEvidenceRef[];
+  allowedEvidenceCatalog: readonly Readonly<{
+    index: number;
+    reference: PublicEvidenceRef;
+  }>[];
 }>;
+
+export class PublicEvidenceIndexError extends Error {
+  public constructor(public readonly code: string) {
+    super(code);
+    this.name = "PublicEvidenceIndexError";
+  }
+}
 
 export function publicContextEvidenceRefs(
   context: PublicContextV1,
@@ -64,76 +74,112 @@ export function publicEvaluatorPromptInput(
       baseWikiVersion: context.baseWiki?.version ?? 0,
       targetThroughSeq: context.session.targetThroughSeq,
     },
-    allowedEvidenceRefs: publicContextEvidenceRefs(context),
+    allowedEvidenceCatalog: publicContextEvidenceRefs(context).map(
+      (reference, index) => ({ index, reference }),
+    ),
   };
 }
 
 /**
- * Evidence UUIDs are opaque database identifiers, not semantic model output.
- * The model selects evidence by the stable locator it can reason about (message
- * sequence or Book item id); the server restores the exact reference from the
- * already validated PUBLIC context. Unknown locators remain untouched and are
- * rejected by the normal allow-list and database resolver checks.
+ * Provider output uses indexes into the exact PUBLIC evidence catalog so it
+ * never has to repeat opaque UUID-bearing reference objects. The canonical
+ * application result still contains full references and passes the unchanged
+ * allow-list and database materialization checks.
  */
-export function canonicalizePublicEvidenceRefs<T>(
+export function expandPublicEvaluatorEvidenceIndexes<T>(
   value: T,
   context: PublicContextV1,
 ): T {
   const allowed = publicContextEvidenceRefs(context);
-  const messagesBySeq = new Map(
-    allowed.flatMap((reference) =>
-      reference.type === "MESSAGE" || reference.type === "AI_INTERVENTION"
-        ? [[reference.seqNo, reference] as const]
-        : [],
-    ),
-  );
-  const bookItemsById = new Map(
-    allowed.flatMap((reference) =>
-      reference.type === "BOOK_CONTEXT_ITEM"
-        ? [[reference.itemId, reference] as const]
-        : [],
-    ),
-  );
+  const referenceAt = (candidate: unknown): PublicEvidenceRef => {
+    if (!Number.isInteger(candidate) || (candidate as number) < 0) {
+      throw new PublicEvidenceIndexError("PUBLIC_EVIDENCE_INDEX_INVALID");
+    }
+    const reference = allowed[candidate as number];
+    if (reference === undefined) {
+      throw new PublicEvidenceIndexError("PUBLIC_EVIDENCE_INDEX_OUT_OF_RANGE");
+    }
+    return reference;
+  };
 
   const visit = (candidate: unknown): unknown => {
-    const parsed = PublicEvidenceRefSchema.safeParse(candidate);
-    if (parsed.success) {
-      const reference = parsed.data;
-      if (
-        reference.type === "MESSAGE" ||
-        reference.type === "AI_INTERVENTION"
-      ) {
-        return messagesBySeq.get(reference.seqNo) ?? reference;
-      }
-      if (reference.type === "BOOK_CONTEXT_ITEM") {
-        return bookItemsById.get(reference.itemId) ?? reference;
-      }
-      return reference;
-    }
     if (Array.isArray(candidate)) {
-      const visited = candidate.map(visit);
-      const references = visited.map((item) =>
-        PublicEvidenceRefSchema.safeParse(item),
-      );
-      if (references.every((item) => item.success)) {
-        const unique = new Map<string, PublicEvidenceRef>();
-        for (const reference of references) {
-          unique.set(
-            publicEvidenceRefKey(reference.data),
-            reference.data,
-          );
-        }
-        return [...unique.values()];
-      }
-      return visited;
+      return candidate.map(visit);
     }
     if (candidate !== null && typeof candidate === "object") {
-      return Object.fromEntries(
-        Object.entries(candidate).map(([key, nested]) => [key, visit(nested)]),
-      );
+      const result: Record<string, unknown> = {};
+      for (const [key, nested] of Object.entries(candidate)) {
+        if (key === "evidenceRefIndexes") {
+          if (!Array.isArray(nested)) {
+            throw new PublicEvidenceIndexError("PUBLIC_EVIDENCE_INDEX_INVALID");
+          }
+          const unique = new Map<string, PublicEvidenceRef>();
+          for (const index of nested) {
+            const reference = referenceAt(index);
+            unique.set(publicEvidenceRefKey(reference), reference);
+          }
+          result.evidenceRefs = [...unique.values()];
+        } else if (key === "bookContextItemRefIndex") {
+          const reference = referenceAt(nested);
+          if (reference.type !== "BOOK_CONTEXT_ITEM") {
+            throw new PublicEvidenceIndexError(
+              "PUBLIC_BOOK_EVIDENCE_INDEX_TYPE_INVALID",
+            );
+          }
+          result.bookContextItemRef = reference;
+        } else {
+          result[key] = visit(nested);
+        }
+      }
+      return result;
     }
     return candidate;
   };
 
+  return visit(value) as T;
+}
+
+/** Test/eval helper for verifying the provider-index round trip. */
+export function indexPublicEvaluatorEvidenceRefs<T>(
+  value: T,
+  context: PublicContextV1,
+): T {
+  const indexByKey = new Map(
+    publicContextEvidenceRefs(context).map((reference, index) => [
+      publicEvidenceRefKey(reference),
+      index,
+    ]),
+  );
+  const indexOf = (candidate: unknown): number => {
+    const parsed = PublicEvidenceRefSchema.safeParse(candidate);
+    if (!parsed.success) {
+      throw new PublicEvidenceIndexError("PUBLIC_EVIDENCE_REFERENCE_INVALID");
+    }
+    const index = indexByKey.get(publicEvidenceRefKey(parsed.data));
+    if (index === undefined) {
+      throw new PublicEvidenceIndexError("PUBLIC_EVIDENCE_REFERENCE_NOT_ALLOWED");
+    }
+    return index;
+  };
+  const visit = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(visit);
+    if (candidate !== null && typeof candidate === "object") {
+      const result: Record<string, unknown> = {};
+      for (const [key, nested] of Object.entries(candidate)) {
+        if (key === "evidenceRefs") {
+          if (!Array.isArray(nested)) {
+            throw new PublicEvidenceIndexError("PUBLIC_EVIDENCE_REFERENCE_INVALID");
+          }
+          result.evidenceRefIndexes = nested.map(indexOf);
+        } else if (key === "bookContextItemRef") {
+          result.bookContextItemRefIndex = indexOf(nested);
+        } else {
+          result[key] = visit(nested);
+        }
+      }
+      return result;
+    }
+    return candidate;
+  };
   return visit(value) as T;
 }

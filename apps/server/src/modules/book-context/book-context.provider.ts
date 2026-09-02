@@ -14,6 +14,7 @@ export type GetBookContextInput = Readonly<{
   consumer: BookContextConsumer;
   sectionAllowList?: readonly BookContextSectionCode[];
   itemIds?: readonly string[];
+  preferredItemIds?: readonly string[];
   query?: string;
   maxItems: number;
 }>;
@@ -23,4 +24,3 @@ export interface BookContextProvider {
 }
 
 export const BOOK_CONTEXT_PROVIDER = Symbol("BOOK_CONTEXT_PROVIDER");
-

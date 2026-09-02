@@ -2,7 +2,8 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import {
   PublicContextV1Schema,
-  PublicEvaluatorProviderOutputV1Schema,
+  PublicEvaluatorProviderObservationV3Schema,
+  PublicEvaluatorProviderOutputV2Schema,
   PublicEvaluatorOutputV1Schema,
   collectPublicEvidenceRefs,
   publicEvidenceRefKey,
@@ -19,7 +20,8 @@ import {
   type PublicEvidenceResolver,
 } from "../ai-context/public-evidence-reference.resolver.js";
 import {
-  canonicalizePublicEvidenceRefs,
+  expandPublicEvaluatorEvidenceIndexes,
+  PublicEvidenceIndexError,
   publicContextEvidenceRefs,
 } from "../ai-context/public-context-evidence.js";
 import type { ClaimedAiJob } from "../ai-jobs/ai-job.queue.js";
@@ -155,12 +157,52 @@ export class PublicEvaluatorOutputValidator {
     rawOutput: unknown,
   ): Promise<PublicEvaluatorOutputV1> {
     this.assertContextAllowed(job, context);
-    const providerOutput = PublicEvaluatorProviderOutputV1Schema.safeParse(rawOutput);
+    const providerSchema =
+      job.jobType === "PUBLIC_EVALUATION"
+        ? PublicEvaluatorProviderObservationV3Schema
+        : PublicEvaluatorProviderOutputV2Schema;
+    const providerOutput = providerSchema.safeParse(rawOutput);
     if (!providerOutput.success) this.fail("PUBLIC_EVALUATOR_OUTPUT_INVALID");
-    const canonicalOutput = this.normalizeProviderOutput(canonicalizePublicEvidenceRefs(
-      providerOutput.data,
+    const outputWithPatch =
+      job.jobType === "PUBLIC_EVALUATION"
+        ? {
+            ...providerOutput.data,
+            wikiPatch: {
+              schemaVersion: "living-wiki-patch.v1" as const,
+              baseVersion: job.baseWikiVersion,
+              basedThroughSeq: job.targetThroughSeq,
+              operations: [],
+            },
+          }
+        : providerOutput.data;
+    let expandedOutput: unknown;
+    try {
+      expandedOutput = expandPublicEvaluatorEvidenceIndexes(
+        outputWithPatch,
+        context,
+      );
+    } catch (error) {
+      this.fail(
+        "PUBLIC_EVALUATOR_EVIDENCE_INDEX_INVALID",
+        error instanceof PublicEvidenceIndexError ? error.code : null,
+      );
+    }
+    const canonicalOutput = this.normalizeProviderOutput(
+      expandedOutput as PublicEvaluatorOutputV1,
       context,
-    ), context);
+    );
+    return this.validateCanonical(job, context, canonicalOutput);
+  }
+
+  public async validateCanonical(
+    job: ClaimedAiJob,
+    context: PublicContextV1,
+    rawOutput: unknown,
+  ): Promise<PublicEvaluatorOutputV1> {
+    this.assertContextAllowed(job, context);
+    const outputResult = PublicEvaluatorOutputV1Schema.safeParse(rawOutput);
+    if (!outputResult.success) this.fail("PUBLIC_EVALUATOR_OUTPUT_INVALID");
+    const canonicalOutput = outputResult.data;
     if (
       canonicalOutput.packVersionId !== context.session.pinnedPackVersionId ||
       canonicalOutput.baseWikiVersion !== job.baseWikiVersion ||
@@ -168,9 +210,7 @@ export class PublicEvaluatorOutputValidator {
     ) {
       this.fail("PUBLIC_EVALUATOR_OUTPUT_ENVELOPE_MISMATCH");
     }
-    const outputResult = PublicEvaluatorOutputV1Schema.safeParse(canonicalOutput);
-    if (!outputResult.success) this.fail("PUBLIC_EVALUATOR_OUTPUT_INVALID");
-    const output = outputResult.data;
+    const output = canonicalOutput;
 
     this.validateMetricReasons(output.metrics);
     this.validateParticipantScope(context, output);

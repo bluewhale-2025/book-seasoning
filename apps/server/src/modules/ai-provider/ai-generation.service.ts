@@ -74,6 +74,7 @@ export class AiGenerationService {
         model: run.model,
         reasoningEffort: run.reasoningEffort,
         latencyMs: run.latencyMs,
+        requestMetrics: run.requestMetrics,
       },
     );
   }

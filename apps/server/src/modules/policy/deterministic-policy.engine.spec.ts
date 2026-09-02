@@ -18,6 +18,7 @@ import { DeterministicPolicyEngine } from "./deterministic-policy.engine.js";
 type MetricName = keyof DiscussionMetricsV1;
 
 const subject = new DeterministicPolicyEngine();
+const secondParticipantId = "b7000000-0000-4000-8000-000000000099";
 
 const observation = (
   metric: MetricName,
@@ -99,12 +100,69 @@ describe("DeterministicPolicyEngine", () => {
   it("moves Opening to Core once at least two public perspectives surface", () => {
     const context = contextWith({}, {
       session: { ...evaluatorContext.session, phase: "OPENING" },
+      messages: evaluatorContext.messages.map((message, index) =>
+        index === 1
+          ? { ...message, authorParticipantId: secondParticipantId }
+          : message,
+      ),
+      participants: [
+        ...evaluatorContext.participants,
+        {
+          ...evaluatorContext.participants[0]!,
+          participantId: secondParticipantId,
+          profileName: "두 번째 참가자",
+          role: "PARTICIPANT",
+          messageCountThroughCursor: 1,
+          lastMessageSeq: 4,
+        },
+      ],
+      objectiveMetrics: {
+        ...evaluatorContext.objectiveMetrics,
+        registeredParticipantCount: 2,
+        actualParticipantCount: 2,
+        connectedParticipantCount: 2,
+        recentSpeakerCount: 2,
+      },
     });
 
     expect(decide(PublicEvaluatorOutputV1Fixture, context)).toMatchObject({
       action: "TRANSITION",
       reasonCodes: ["OPENING_POSITIONS_SURFACED"],
     });
+  });
+
+  it("does not leave Opening when two perspective labels have only one speaker's evidence", () => {
+    const context = contextWith({}, {
+      session: { ...evaluatorContext.session, phase: "OPENING" },
+    });
+
+    expect(decide(PublicEvaluatorOutputV1Fixture, context)).toMatchObject({
+      action: "WAIT",
+    });
+  });
+
+  it("does not leave Opening when duplicated perspectives cite the same evidence", () => {
+    const firstPerspective = PublicEvaluatorOutputV1Fixture.majorPerspectives[0]!;
+    const evaluation = {
+      ...PublicEvaluatorOutputV1Fixture,
+      majorPerspectives: [
+        firstPerspective,
+        {
+          ...PublicEvaluatorOutputV1Fixture.majorPerspectives[1]!,
+          evidenceRefs: firstPerspective.evidenceRefs,
+        },
+      ],
+    };
+    const context = contextWith({}, {
+      session: { ...evaluatorContext.session, phase: "OPENING" },
+      messages: evaluatorContext.messages.map((message, index) =>
+        index === 1
+          ? { ...message, authorParticipantId: secondParticipantId }
+          : message,
+      ),
+    });
+
+    expect(decide(evaluation, context)).toMatchObject({ action: "WAIT" });
   });
 
   it("preserves good human flow even when Book Grounding is low and ignores suggestedAction", () => {
@@ -177,6 +235,31 @@ describe("DeterministicPolicyEngine", () => {
     expect(
       decide(evaluationWith({ activity: "LOW", saturation: "MEDIUM" })),
     ).toMatchObject({ action: "REVIVE" });
+  });
+
+  it("uses objective silence even when the evaluator reports stale high Activity", () => {
+    const silentContext = contextWith({}, {
+      objectiveMetrics: {
+        ...evaluatorContext.objectiveMetrics,
+        silenceSeconds: 75,
+      },
+    });
+
+    expect(
+      decide(
+        evaluationWith({
+          activity: "HIGH",
+          expansion: "HIGH",
+          relevance: "HIGH",
+          saturation: "MEDIUM",
+        }),
+        silentContext,
+        { trigger: "SILENCE" },
+      ),
+    ).toMatchObject({
+      action: "REVIVE",
+      reasonCodes: ["OBJECTIVE_SILENCE_WITH_EXPLORATION_REMAINING"],
+    });
   });
 
   it("waits when Expansion remains high despite a high Saturation signal", () => {

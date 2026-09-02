@@ -158,7 +158,10 @@ select * from private.enqueue_ai_session_job(
 );
 
 select is(
-  (select count(*) from private.ai_job_runs),
+  (
+    select count(*) from private.ai_job_runs
+    where session_id = 'c5000000-0000-4000-8000-000000000001'
+  ),
   1::bigint,
   'enqueue creates one durable job row'
 );
@@ -232,12 +235,18 @@ select is(
   'a visible queue message claims its durable job'
 );
 select is(
-  (select status || ':' || attempt_count::text from private.ai_job_runs),
+  (
+    select status || ':' || attempt_count::text from private.ai_job_runs
+    where id = (select job_id from first_claim)
+  ),
   'PROCESSING:1',
   'claim starts the first leased attempt'
 );
 select is(
-  (select count(*) from private.ai_job_attempts),
+  (
+    select count(*) from private.ai_job_attempts
+    where job_id = (select job_id from first_claim)
+  ),
   1::bigint,
   'claim records one content-free attempt row'
 );
@@ -263,7 +272,10 @@ select is(
   'the active attempt can extend its visibility lease'
 );
 select ok(
-  (select lease_expires_at > timezone('utc', now()) from private.ai_job_runs),
+  (
+    select lease_expires_at > timezone('utc', now()) from private.ai_job_runs
+    where id = (select job_id from first_claim)
+  ),
   'the durable job reflects the extended lease'
 );
 select is(
@@ -278,12 +290,15 @@ select is(
   'a retryable failure schedules the same queue message again'
 );
 select is(
-  (select status from private.ai_job_runs),
+  (select status from private.ai_job_runs where id = (select job_id from first_claim)),
   'RETRY_SCHEDULED',
   'retry remains a non-terminal durable state'
 );
 select is(
-  (select outcome from private.ai_job_attempts where attempt_no = 1),
+  (
+    select outcome from private.ai_job_attempts
+    where job_id = (select job_id from first_claim) and attempt_no = 1
+  ),
   'RETRYABLE_FAILURE',
   'retry preserves the first attempt outcome'
 );
@@ -331,12 +346,15 @@ select is(
   'the current attempt completes and archives atomically'
 );
 select is(
-  (select status from private.ai_job_runs),
+  (select status from private.ai_job_runs where id = (select job_id from second_claim)),
   'SUCCEEDED',
   'successful work becomes terminal'
 );
 select is(
-  (select outcome from private.ai_job_attempts where attempt_no = 2),
+  (
+    select outcome from private.ai_job_attempts
+    where job_id = (select job_id from second_claim) and attempt_no = 2
+  ),
   'SUCCEEDED',
   'the successful attempt is retained for diagnostics'
 );

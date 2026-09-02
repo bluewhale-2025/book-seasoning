@@ -5,6 +5,7 @@ import {
   OpeningContextV1Schema,
   OpeningOutputV1Schema,
   PolicyInterventionDecisionV1Fixture,
+  PublicContextV1Schema,
   PublicEvaluatorOutputV1Fixture,
   type AiProviderRunV1,
   type PublicEvidenceRef,
@@ -22,7 +23,11 @@ import { HostOutputValidator } from "../modules/ai-host/host-output.validator.js
 import { OpeningOutputValidator } from "../modules/ai-host/opening-output.validator.js";
 import { PublicAiOutputSafetyValidator } from "../modules/ai-host/public-ai-output-safety.validator.js";
 import { LivingWikiEvaluatorConsistencyValidator } from "../modules/living-wiki/living-wiki-evaluator-consistency.validator.js";
+import { LivingWikiCommitService } from "../modules/living-wiki/living-wiki-commit.service.js";
 import { LivingWikiPatchEngine } from "../modules/living-wiki/living-wiki-patch.engine.js";
+import type { LivingWikiRepository } from "../modules/living-wiki/living-wiki.repository.js";
+import { TopicCheckpointValidator } from "../modules/living-wiki/topic-checkpoint.validator.js";
+import { DeterministicPolicyEngine } from "../modules/policy/deterministic-policy.engine.js";
 import {
   hostInterventionTask,
   openingTask,
@@ -38,6 +43,7 @@ type EvalReport = Readonly<{
   taskAlias: string;
   model: string;
   latencyMs: number;
+  requestMetrics: AiProviderRunV1["requestMetrics"];
   usage: AiProviderRunV1["usage"];
 }>;
 
@@ -54,6 +60,10 @@ const hasConfiguredApiKey =
 const apiKey = hasConfiguredApiKey
   ? configuredApiKey
   : "live-eval-key-not-configured";
+const evaluatorRepeatCount = Math.min(
+  5,
+  Math.max(1, Number.parseInt(process.env.AI_EVALUATOR_REPEAT_COUNT ?? "1", 10) || 1),
+);
 
 const environment: RuntimeEnvironment = {
   nodeEnv: "test",
@@ -87,6 +97,7 @@ function report(run: AiProviderRunV1): EvalReport {
     taskAlias: run.taskAlias,
     model: run.model,
     latencyMs: run.latencyMs,
+    requestMetrics: run.requestMetrics,
     usage: run.usage,
   };
 }
@@ -159,20 +170,114 @@ async function evaluatePublicEvaluator(): Promise<EvalReport> {
     evaluatorContext,
     generated.output,
   );
-  const candidate = await new LivingWikiPatchEngine(resolver).apply({
-    scope: {
-      sessionId: evaluatorContext.session.sessionId,
-      roomId: evaluatorContext.session.roomId,
-      pinnedPackVersionId: evaluatorContext.session.pinnedPackVersionId,
-      targetThroughSeq: evaluatorContext.session.targetThroughSeq,
-    },
+  const repository = {
+    commitCandidate: () =>
+      Promise.resolve({
+        evaluationId: evaluatorJob.jobId,
+        status: "COMMITTED" as const,
+        committedWikiVersion: 2,
+        currentWikiVersion: 2,
+        currentBasedThroughSeq: evaluatorJob.targetThroughSeq,
+        wroteWikiVersion: true,
+        shouldRequeue: false,
+      }),
+    commitInsufficientFinal: () =>
+      Promise.reject(new LiveEvalError("UNEXPECTED_INSUFFICIENT_FINAL")),
+  } satisfies LivingWikiRepository;
+  await new LivingWikiCommitService(
+    new LivingWikiPatchEngine(resolver),
+    new TopicCheckpointValidator(),
+    new LivingWikiEvaluatorConsistencyValidator(),
+    repository,
+  ).commitPatch({
+    job: evaluatorJob,
+    roomId: evaluatorContext.session.roomId,
+    pinnedPackVersionId: evaluatorContext.session.pinnedPackVersionId,
     currentWiki: evaluatorContext.baseWiki,
-    patch: output.wikiPatch,
+    evaluatorOutput: output,
   });
-  new LivingWikiEvaluatorConsistencyValidator().assertConsistent(
-    output,
-    candidate.document,
+  return report(generated.run);
+}
+
+async function evaluateOpeningPerspectiveDetection(): Promise<EvalReport> {
+  const secondParticipantId = "b7000000-0000-4000-8000-000000000099";
+  const context = PublicContextV1Schema.parse({
+    ...evaluatorContext,
+    builtAt: "2026-09-02T04:00:00.000Z",
+    session: {
+      ...evaluatorContext.session,
+      phase: "OPENING",
+      phaseVersion: 1,
+      targetThroughSeq: 2,
+      latestMessageSeq: 2,
+    },
+    baseWiki: null,
+    messages: [
+      {
+        ...evaluatorContext.messages[0],
+        messageId: "b8000000-0000-4000-8000-000000000001",
+        seqNo: 1,
+        authorParticipantId: evaluatorContext.participants[0]!.participantId,
+        body: "조르바의 자유는 사회 규칙보다 개인의 생명력을 앞세운다는 점에서 긍정적이라고 봐요.",
+      },
+      {
+        ...evaluatorContext.messages[1],
+        messageId: "b8000000-0000-4000-8000-000000000002",
+        seqNo: 2,
+        authorParticipantId: secondParticipantId,
+        authorProfileName: "두 번째 참가자",
+        body: "반대로 타인에 대한 책임이 빠진 자유는 해방이 아니라 방종이어서 경계해야 한다고 생각해요.",
+      },
+    ],
+    participants: [
+      {
+        ...evaluatorContext.participants[0],
+        messageCountThroughCursor: 1,
+        lastMessageSeq: 1,
+      },
+      {
+        ...evaluatorContext.participants[0],
+        participantId: secondParticipantId,
+        profileName: "두 번째 참가자",
+        role: "PARTICIPANT",
+        messageCountThroughCursor: 1,
+        lastMessageSeq: 2,
+      },
+    ],
+    objectiveMetrics: {
+      ...evaluatorContext.objectiveMetrics,
+      registeredParticipantCount: 2,
+      actualParticipantCount: 2,
+      connectedParticipantCount: 2,
+      recentSpeakerCount: 2,
+      silenceSeconds: 60,
+    },
+  });
+  const job = {
+    ...evaluatorJob,
+    baseWikiVersion: 0,
+    targetThroughSeq: 2,
+  };
+  const generated = await gateway.generate(
+    publicEvaluatorTask("INCREMENTAL"),
+    publicEvaluatorPromptInput(context),
   );
+  const output = await new PublicEvaluatorOutputValidator(resolver).validate(
+    job,
+    context,
+    generated.output,
+  );
+  const decision = new DeterministicPolicyEngine().decide({
+    evaluationId: evaluatorJob.jobId,
+    committedWikiVersion: 1,
+    context,
+    evaluation: output,
+    trigger: "PARTICIPATION_THRESHOLD",
+    hostHelpReason: null,
+  });
+  if (decision.action !== "TRANSITION") {
+    throw new LiveEvalError("OPENING_DISTINCT_PERSPECTIVES_NOT_DETECTED");
+  }
   return report(generated.run);
 }
 
@@ -196,7 +301,10 @@ if (!hasConfiguredApiKey) {
 } else {
   try {
     const results = [];
-    results.push(await evaluatePublicEvaluator());
+    for (let index = 0; index < evaluatorRepeatCount; index += 1) {
+      results.push(await evaluatePublicEvaluator());
+    }
+    results.push(await evaluateOpeningPerspectiveDetection());
     results.push(await evaluateOpening());
     results.push(await evaluateHost());
     process.stdout.write(`${JSON.stringify({ status: "PASSED", results })}\n`);

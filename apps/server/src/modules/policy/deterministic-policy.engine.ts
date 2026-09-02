@@ -76,7 +76,7 @@ export class DeterministicPolicyEngine {
 
     if (
       input.context.session.phase === "OPENING" &&
-      input.evaluation.majorPerspectives.length >= 2
+      this.openingPerspectivesSurfaced(input)
     ) {
       return this.decision(
         input,
@@ -87,7 +87,11 @@ export class DeterministicPolicyEngine {
     }
 
     const metrics = input.evaluation.metrics;
+    const objectiveSilence =
+      input.trigger === "SILENCE" &&
+      input.context.objectiveMetrics.silenceSeconds >= 60;
     if (
+      !objectiveSilence &&
       metrics.expansion.level === "HIGH" &&
       metrics.relevance.level === "HIGH" &&
       metrics.activity.level === "HIGH"
@@ -136,7 +140,7 @@ export class DeterministicPolicyEngine {
       );
     }
 
-    if (metrics.activity.level === "LOW") {
+    if (metrics.activity.level === "LOW" || objectiveSilence) {
       if (
         metrics.participationBalance.level === "LOW" &&
         input.context.objectiveMetrics.connectedParticipantCount >= 2 &&
@@ -159,7 +163,11 @@ export class DeterministicPolicyEngine {
       return this.decision(
         input,
         "REVIVE",
-        ["ACTIVITY_LOW_WITH_EXPLORATION_REMAINING"],
+        [
+          objectiveSilence
+            ? "OBJECTIVE_SILENCE_WITH_EXPLORATION_REMAINING"
+            : "ACTIVITY_LOW_WITH_EXPLORATION_REMAINING",
+        ],
         ["activity", "saturation"],
       );
     }
@@ -275,6 +283,66 @@ export class DeterministicPolicyEngine {
       return phase === "OPENING" || phase === "CORE" || phase === "EXTENDED";
     }
     return phase === "OPENING" || phase === "CORE" || phase === "EXTENDED";
+  }
+
+  private openingPerspectivesSurfaced(
+    input: DeterministicPolicyInput,
+  ): boolean {
+    if (input.evaluation.majorPerspectives.length < 2) return false;
+    const participantByMessageId = new Map(
+      input.context.messages
+        .filter(
+          (message) =>
+            message.kind === "PARTICIPANT" &&
+            message.authorParticipantId !== null &&
+            message.redactedAt === null,
+        )
+        .map((message) => [message.messageId, message.authorParticipantId!]),
+    );
+    const perspectiveEvidence = input.evaluation.majorPerspectives.map(
+      (perspective) => {
+        const messageIds = new Set<string>();
+        const participantIds = new Set<string>();
+        for (const reference of perspective.evidenceRefs) {
+          if (reference.type !== "MESSAGE") continue;
+          const participantId = participantByMessageId.get(reference.messageId);
+          if (participantId === undefined) continue;
+          messageIds.add(reference.messageId);
+          participantIds.add(participantId);
+        }
+        return {
+          summary: perspective.summary.trim().toLocaleLowerCase("ko-KR"),
+          messageIds,
+          participantIds,
+        };
+      },
+    );
+
+    for (let leftIndex = 0; leftIndex < perspectiveEvidence.length; leftIndex += 1) {
+      const left = perspectiveEvidence[leftIndex]!;
+      for (
+        let rightIndex = leftIndex + 1;
+        rightIndex < perspectiveEvidence.length;
+        rightIndex += 1
+      ) {
+        const right = perspectiveEvidence[rightIndex]!;
+        if (left.summary === right.summary) continue;
+        const sameEvidence =
+          left.messageIds.size === right.messageIds.size &&
+          [...left.messageIds].every((messageId) => right.messageIds.has(messageId));
+        if (sameEvidence) continue;
+        if (
+          [...left.participantIds].some((leftParticipantId) =>
+            [...right.participantIds].some(
+              (rightParticipantId) => rightParticipantId !== leftParticipantId,
+            ),
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private cooldownActive(context: PublicContextV1): boolean {

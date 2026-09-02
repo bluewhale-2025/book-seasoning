@@ -4,10 +4,13 @@ import {
   AiEngineFixtureIds,
   PublicEvaluatorOutputV1Fixture,
   type PublicContextV1,
+  type PublicEvaluatorOutputV1,
+  type PublicEvaluatorProviderOutputV2,
   type PublicEvidenceRef,
 } from "@bookseasoning/contracts/internal";
 
 import type { PublicContextBuilder } from "../ai-context/public-context.builder.js";
+import { indexPublicEvaluatorEvidenceRefs } from "../ai-context/public-context-evidence.js";
 import type {
   PublicEvidenceResolver,
   ResolvedPublicEvidence,
@@ -21,12 +24,14 @@ import type {
   LivingWikiRepository,
 } from "../living-wiki/living-wiki.repository.js";
 import { TopicCheckpointValidator } from "../living-wiki/topic-checkpoint.validator.js";
+import type { ClaimedAiJob } from "../ai-jobs/ai-job.queue.js";
 import { PublicEvaluationService } from "./public-evaluation.service.js";
 import { PublicEvaluatorOutputValidator } from "./public-evaluator-output.validator.js";
 import type {
   PublicEvaluator,
   PublicEvaluatorInput,
 } from "./public-evaluator.js";
+import type { ReusablePublicEvaluationRepository } from "./reusable-public-evaluation.repository.js";
 import { evaluatorContext, evaluatorJob } from "./public-evaluator.fixture.js";
 
 class FakeContextBuilder {
@@ -87,13 +92,39 @@ class FakeLivingWikiRepository implements LivingWikiRepository {
   }
 }
 
+class FakeReusableEvaluationRepository
+  implements ReusablePublicEvaluationRepository
+{
+  public readonly calls: ClaimedAiJob[] = [];
+
+  public constructor(
+    private readonly output: PublicEvaluatorOutputV1 | null = null,
+  ) {}
+
+  public findForSameCursor(job: ClaimedAiJob) {
+    this.calls.push(job);
+    return Promise.resolve(this.output);
+  }
+}
+
 const createSubject = (
   output: unknown = PublicEvaluatorOutputV1Fixture,
   repository = new FakeLivingWikiRepository(),
   context: PublicContextV1 = evaluatorContext,
+  reusableOutput: PublicEvaluatorOutputV1 | null = null,
 ) => {
   const contextBuilder = new FakeContextBuilder(context);
-  const evaluator = new FakeEvaluator(output);
+  const indexed = indexPublicEvaluatorEvidenceRefs(
+    output,
+    context,
+  ) as PublicEvaluatorProviderOutputV2;
+  const incrementalObservation = Object.fromEntries(
+    Object.entries(indexed).filter(([key]) => key !== "wikiPatch"),
+  );
+  const evaluator = new FakeEvaluator(incrementalObservation);
+  const reusableRepository = new FakeReusableEvaluationRepository(
+    reusableOutput,
+  );
   const resolver = new FakeEvidenceResolver();
   const commitService = new LivingWikiCommitService(
     new LivingWikiPatchEngine(resolver),
@@ -105,18 +136,26 @@ const createSubject = (
     contextBuilder,
     evaluator,
     repository,
+    reusableRepository,
     subject: new PublicEvaluationService(
       contextBuilder as unknown as PublicContextBuilder,
       evaluator,
       new PublicEvaluatorOutputValidator(resolver),
       commitService,
+      reusableRepository,
     ),
   };
 };
 
 describe("PublicEvaluationService", () => {
   it("runs the fake Evaluator through context, semantic validation and Wiki commit", async () => {
-    const { subject, contextBuilder, evaluator, repository } = createSubject();
+    const {
+      subject,
+      contextBuilder,
+      evaluator,
+      repository,
+      reusableRepository,
+    } = createSubject();
 
     await expect(subject.evaluate(evaluatorJob)).resolves.toMatchObject({
       output: { schemaVersion: "public-evaluator-output.v1" },
@@ -124,6 +163,7 @@ describe("PublicEvaluationService", () => {
         evaluationId: AiEngineFixtureIds.evaluationId,
         status: "COMMITTED",
       },
+      source: "PROVIDER",
     });
     expect(contextBuilder.calls).toEqual([
       {
@@ -133,7 +173,48 @@ describe("PublicEvaluationService", () => {
       },
     ]);
     expect(evaluator.calls[0]).toMatchObject({ task: "INCREMENTAL" });
+    expect(reusableRepository.calls).toEqual([]);
     expect(repository.calls).toHaveLength(1);
+    expect(repository.calls[0]?.evaluatorOutput.wikiPatch.operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ operation: "SET_CURRENT_TOPIC" }),
+        expect.objectContaining({ operation: "UPSERT_PERSPECTIVE" }),
+        expect.objectContaining({ operation: "SET_METRICS_AND_KEY_CHANGES" }),
+      ]),
+    );
+  });
+
+  it("reuses the last validated evaluation for a SILENCE cycle at the same cursor", async () => {
+    const { subject, evaluator, reusableRepository, repository } = createSubject(
+      PublicEvaluatorOutputV1Fixture,
+      undefined,
+      evaluatorContext,
+      PublicEvaluatorOutputV1Fixture,
+    );
+
+    await expect(
+      subject.evaluate(evaluatorJob, { reuseSameCursor: true }),
+    ).resolves.toMatchObject({
+      source: "REUSED_SAME_CURSOR",
+      output: {
+        baseWikiVersion: evaluatorJob.baseWikiVersion,
+        targetThroughSeq: evaluatorJob.targetThroughSeq,
+      },
+      commit: { status: "COMMITTED" },
+    });
+    expect(reusableRepository.calls).toEqual([evaluatorJob]);
+    expect(evaluator.calls).toEqual([]);
+    expect(repository.calls).toHaveLength(1);
+  });
+
+  it("falls back to the provider when no same-cursor evaluation is reusable", async () => {
+    const { subject, evaluator, reusableRepository } = createSubject();
+
+    await expect(
+      subject.evaluate(evaluatorJob, { reuseSameCursor: true }),
+    ).resolves.toMatchObject({ source: "PROVIDER" });
+    expect(reusableRepository.calls).toEqual([evaluatorJob]);
+    expect(evaluator.calls).toHaveLength(1);
   });
 
   it("returns stale suppression without treating the generated output as committed", async () => {

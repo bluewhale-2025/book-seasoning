@@ -100,6 +100,13 @@ describe("OpeningService", () => {
       model: "host-model",
       reasoningEffort: "low" as const,
       latencyMs: 10,
+      requestMetrics: {
+        inputBytes: 10,
+        instructionsBytes: 10,
+        outputSchemaBytes: 10,
+        totalRequestBytes: 30,
+        maxOutputTokens: 1_200,
+      },
     };
     const subject = makeSubject(
       new AiGatewayInvocationError("AI_PROVIDER_RATE_LIMITED", true, run),

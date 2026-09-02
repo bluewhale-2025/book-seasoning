@@ -416,6 +416,8 @@ AI 평가와 결과, Builder, 보관 만료는 재시도와 중복 방지가 필
 - workflow 수가 늘어 재시도·관찰·운영 비용이 외부 orchestrator 비용보다 커질 때
 - queue backlog, throughput 또는 Postgres 부하가 AI와 사용자 transaction에 지속적으로 영향을 줄 때
 
+2026-09-03에는 시간 기반 orchestration이 마지막 AI 개입 뒤 새 참가자 응답과 90초 cooldown을 모두 요구하도록 보강했다. AI 발화만 이어지는 silence loop와 cooldown 중 불필요한 provider 호출을 차단하되, human message 기반 job은 계속 허용한다. 추가로 Cron 해상도를 10초에서 1초로 조정했다. reconciler는 한 번에 active session 최대 100개만 보고 transaction advisory lock으로 중첩 실행을 거절하므로 60초 침묵 threshold를 1초 해상도로 감지하면서 같은 cycle의 중복 enqueue를 막는다. 새 공개 메시지가 없고 latest Wiki가 같은 cursor를 이미 덮는 `SILENCE` job은 active attempt·authoritative cursor·Wiki version과 이전 committed evaluation을 worker-only 함수에서 함께 검증한 뒤 canonical evaluation을 재사용한다. 조건이 하나라도 어긋나면 Provider를 호출하는 정상 경로로 돌아가며, 재사용 경로도 새 immutable evaluation과 Policy decision을 남겨 상태→판단의 감사 연결을 보존한다.
+
 ## [TECH-007] OpenAI Responses API와 구조화된 AI contract
 
 - Date: 2026-08-30
@@ -480,6 +482,14 @@ Evaluator, Host, Living Wiki, 결과는 서로 다른 책임과 검증 규칙을
 - 비용·지연·품질 중 하나가 운영 목표를 지속적으로 충족하지 못할 때
 - 다른 공급자가 명확한 품질 또는 데이터 처리 이점을 제공할 때
 - Structured Output 제약 때문에 canonical schema의 의미를 반복적으로 축소해야 할 때
+
+### Follow-up implementation status
+
+2026-09-03 안정화에서는 `public-evaluator.v5`가 top-level 상태를 Wiki patch에 반복 요구하지 않게 하고 반복 Zod schema를 `$ref`로 공유해 provider schema를 약 138KB에서 24KB로 축소했다. Incremental Pack item은 최대 24개, output budget은 6,000 token으로 제한하고 Checkpoint 8,000·Final 12,000으로 분리했다. provider 진단에는 원문 없이 input/instructions/schema/total byte, output budget과 cached input token을 추가했다. 실제 v5 Evaluator 3회 반복 eval은 모두 schema·semantic·Wiki commit 검증을 통과했고 7,455 input token에서 10.9초·58.2초·10.0초였다. 동일 입력의 7,452 token이 cache hit였으며 Opening 3.8초, Host 2.8초도 함께 통과했다.
+
+같은 날 `public-evaluator.v6`는 provider-facing output과 application canonical output을 분리했다. provider는 input의 exact `allowedEvidenceCatalog`를 보고 `evidenceRefIndexes`와 `bookContextItemRefIndex`만 출력하며, 서버가 index를 UUID-bearing PUBLIC reference로 복원한 후 기존 canonical/semantic/materialization/privacy gate를 다시 실행한다. 범위 밖 index와 reference type mismatch는 안정된 validation code로 fail-closed 처리한다. 이 변경은 canonical DB result와 downstream Policy/Host contract를 바꾸지 않는다. 실제 Luna 3회에서 provider schema는 20,812 bytes, input은 7,242 token이었고 10.0~13.9초에 모두 통과했다. 반복 호출 중 동일 입력 7,239 token이 cache hit였으며 Terra Opening은 3.4초, Host는 2.8초였다.
+
+같은 날 `public-evaluator.v7`은 일반 incremental 평가와 의미적 Wiki patch 생성을 분리했다. Incremental Provider schema는 `wikiPatch` 없이 metrics·topic·관점·Book Grounding·공개 참여 관찰만 반환하고, 서버가 검증된 top-level 값을 기존 typed operation으로 결정적으로 투영한다. Topic Checkpoint와 Final만 삭제·issue/question·coverage·key change patch를 Provider에 요구한다. 이 선택은 일반 cycle의 schema와 출력 부담을 낮추면서 canonical DB evaluation과 downstream contract를 유지한다. Evaluator/Opening Pack은 문서 선두 24개 또는 전체가 아니라 현재 topic·최근 PUBLIC 발언·기존 grounding 또는 PUBLIC prep 키워드와 section priority로 최대 8개를 선택하고 기존 grounding item을 우선 보존한다. Opening 전환은 모델이 반환한 관점 개수만 신뢰하지 않고 서로 다른 참가자의 서로 다른 PUBLIC message evidence가 별도 관점에 연결됐는지 Policy에서 검증한다. 실제 Luna 일반 평가 3회는 15,878-byte schema·6,676 input token·8.9~12.0초였고 대립 관점 Opening eval도 8.1초에 `TRANSITION`을 통과했다.
 
 ## [TECH-008] AI_PRIVATE의 구조적 context 격리
 

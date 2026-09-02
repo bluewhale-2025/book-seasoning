@@ -20,6 +20,8 @@ export type BuildOpeningContextInput = Readonly<{
   targetThroughSeq: number;
 }>;
 
+export const OPENING_BOOK_ITEM_BUDGET = 8;
+
 export class OpeningContextBuildError extends Error {
   public constructor(public readonly code: string) {
     super(code);
@@ -43,14 +45,18 @@ export class OpeningContextBuilder {
     if (frame.session.phase !== "OPENING") {
       throw new OpeningContextBuildError("OPENING_PHASE_NOT_ALLOWED");
     }
-    const [publicPrep, bookContext] = await Promise.all([
-      this.repository.listPublicPrep({ sessionId: input.sessionId }),
-      this.bookContextProvider.getPackVersion({
-        packVersionId: frame.session.pinnedPackVersionId,
-        consumer: "OPENING",
-        maxItems: Number.MAX_SAFE_INTEGER,
-      }),
-    ]);
+    const publicPrep = await this.repository.listPublicPrep({
+      sessionId: input.sessionId,
+    });
+    const bookContext = await this.bookContextProvider.getPackVersion({
+      packVersionId: frame.session.pinnedPackVersionId,
+      consumer: "OPENING",
+      query: publicPrep
+        .map((answer) => answer.body)
+        .join("\n")
+        .slice(0, 4_000),
+      maxItems: OPENING_BOOK_ITEM_BUDGET,
+    });
     if (bookContext.packVersionId !== frame.session.pinnedPackVersionId) {
       throw new OpeningContextBuildError("OPENING_PACK_VERSION_MISMATCH");
     }

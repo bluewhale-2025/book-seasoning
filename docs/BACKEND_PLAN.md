@@ -267,7 +267,7 @@ Living Wiki document/patch, evidence reference, optimistic commit, Topic Checkpo
 - provider-specific type과 SDK object를 application/domain에 전달하지 않는다.
 - model/provider 변경은 고정 fixture의 live eval과 privacy gate를 통과한 뒤 alias로 승격한다.
 - S5-8 OpenAI adapter는 `responses.parse`와 versioned Zod schema를 사용하며 `store: false`, 무도구·무stream·SDK 재시도 0으로 호출한다. Queue가 bounded retry를 소유하고 사용자-facing 결과는 검증·DB commit 전에는 게시하지 않는다.
-- logical alias는 Evaluator/Checkpoint를 `gpt-5.6-luna` low, Opening/Host를 `gpt-5.6-terra` low에 연결한다. 실제 model, prompt/schema version, reasoning, latency와 usage 또는 안정된 failure code만 private 진단에 보존하고 입력·출력 원문은 provider 진단에 복제하지 않는다.
+- logical alias는 Evaluator/Checkpoint를 `gpt-5.6-luna` low, Opening/Host를 `gpt-5.6-terra` low에 연결한다. 실제 model, prompt/schema version, reasoning, latency, cached/token usage, content-free request byte breakdown과 output budget 또는 안정된 failure code만 private 진단에 보존하고 입력·출력 원문은 provider 진단에 복제하지 않는다.
 
 AI provider와 책 지식 provider는 다른 port다.
 
@@ -276,15 +276,16 @@ AI provider와 책 지식 provider는 다른 port다.
 - `SessionRawDataRetriever`는 exact id/seq, metadata/context-window와 선택적 semantic adapter를 같은 application contract 뒤에 둔다.
 - live Evaluator/Host는 Builder artifact repository와 web search를 import하지 않는다.
 - S5-3 구현의 `PublicContextRepository`는 worker 전용 `read_ai_public_*` 함수 뒤에서 session frame, seq window, exact message id와 PUBLIC prep만 반환한다. Worker role은 원본 table `SELECT` 권한이 없고 `AI_PRIVATE` body table을 조회할 수 없다.
-- `PublicContextBuilder`는 base Wiki cursor 앞의 필요한 인접 원문, objective participant facts와 exact room-pinned Pack을 `public-context.v1`으로 검증한다. 한 번의 context가 200개 메시지를 넘으면 partial context를 만들지 않고 명시적으로 실패한다.
-- S5-6 `PublicEvaluationService`는 `PUBLIC_EVALUATION | TOPIC_CHECKPOINT` job만 받아 context build → provider-neutral Evaluator port → schema/semantic/reference validation → S5-5 commit 순서를 고정한다.
+- `PublicContextBuilder`는 base Wiki cursor 앞의 필요한 인접 원문, objective participant facts와 exact room-pinned Pack을 `public-context.v1`으로 검증한다. 한 번의 context가 200개 메시지를 넘으면 partial context를 만들지 않고 명시적으로 실패한다. Evaluator Pack은 현재 topic·최근 6개 발언·기존 Wiki 관점과 grounding의 키워드, section 우선순위와 기존 item pin을 조합해 최대 8개만 선택하며 Opening Pack도 PUBLIC prep 기준 최대 8개로 제한한다.
+- S5-6 `PublicEvaluationService`는 `PUBLIC_EVALUATION | TOPIC_CHECKPOINT` job만 받아 context build → provider-neutral Evaluator port → schema/semantic/reference validation → S5-5 commit 순서를 고정한다. 일반 incremental Provider output은 Wiki patch 없이 관찰만 반환하고 서버가 검증된 관찰을 typed operation으로 투영한다. Topic Checkpoint와 Final만 의미적 patch를 생성한다. 단 새 공개 메시지가 없는 `SILENCE` job에서 exact Wiki/message cursor를 이미 평가한 committed canonical result가 있으면 worker-only DB 함수로 이를 읽어 현재 context에서 재검증하고 Provider 호출 없이 새 evaluation/Policy cycle을 확정한다.
 - metric reason code는 7개 metric과 `LOW | MEDIUM | HIGH` 조합별 allow-list이며 총점은 만들지 않는다. Evaluator가 입력으로 받지 않은 reference, 다른 participant, 공개 대화와 연결되지 않은 Book Grounding, Wiki candidate와 모순되는 metrics/topic/entity projection은 commit 전에 거절한다.
 - Closing에서는 Evaluator를 호출하지 않는다. provider가 설정되지 않은 worker는 evaluation을 성공으로 가장하지 않고 안전하게 suppress하며, provider·structured output·Wiki semantic 오류는 Queue의 bounded retry 대상으로 분류한다. 검증된 top-level Evaluation과 typed patch가 중복 표현하는 metrics/topic/관점/책 근거/참여 상태는 top-level을 canonical source로 결정적으로 맞추되, 누락 operation이나 새 의미는 만들지 않는다.
 - 성공한 commit은 immutable `evaluation_id`를 함께 반환한다. 이 식별자는 S5-7 Policy correlation에 쓰며 Evaluator의 `suggestedAction` 자체를 Policy 결정으로 승격하지 않는다.
 - Opening은 익명 PUBLIC prep과 exact Pack으로 짧은 입장 질문 하나를 생성한다. provider가 없거나 재시도 불가 또는 최종 attempt 실패이면 고정 기본 질문을 사용하며, session당 공개 효과는 한 번이다.
 - Host context에는 non-WAIT Policy action, 공개 메시지·Wiki 상태와 필요한 Pack subset만 들어간다. action/attribution/Pack/cursor/reference/privacy 검증 뒤 worker-only commit 함수가 최신 phase/version/message cursor를 다시 확인한다. stale 결과와 자동 Host 실패는 참가자 메시지 흐름을 막지 않으며 실패 원문을 공개하지 않는다.
 - Opening의 `TRANSITION` Host action은 AI 메시지와 함께 같은 transaction에서 authoritative phase를 `CORE`로 전환한다.
-- S5-9 orchestration은 session 시작과 연장 window를 상태 변경 transaction 안에서 enqueue하고, participant message trigger와 10초 Cron이 message/participation/silence/topic 후보만 계산한다. Cron 안에서는 provider를 호출하지 않는다.
+- Opening에서 관점 2개 이상이라는 Provider 개수만으로 전환하지 않는다. 각기 다른 참가자의 서로 다른 PUBLIC message가 서로 다른 요약의 관점 근거로 연결돼야 하며, 동일 evidence 복제나 단일 발언자 분할은 `WAIT`한다.
+- S5-9 orchestration은 session 시작과 연장 window를 상태 변경 transaction 안에서 enqueue하고, participant message trigger와 1초 Cron이 message/participation/silence/topic 후보만 계산한다. Cron 안에서는 provider를 호출하지 않는다. 최대 100개 active session scan과 transaction advisory lock으로 중첩 실행을 막으며, 60초 침묵 threshold를 1초 해상도로 감지한다. 마지막 AI 개입 뒤 참가자 응답이 없거나 90초 cooldown 중이면 silence/topic 시간 trigger는 enqueue하지 않되 새 message 기반 평가는 유지한다.
 - `POST /v1/rooms/:roomId/session/ai-help`는 방장만 네 가지 고정 reason으로 호출할 수 있는 비동기 command다. one-in-flight와 idempotency를 보장하고 처리/실패 상태는 방장 snapshot에만 보인다. 연장 의견은 모든 참가자에게 `PENDING | READY | UNAVAILABLE`로 보이되 방장 결정을 대체하거나 차단하지 않는다.
 - 동일 session의 active orchestration job, stable job key, active attempt fencing과 최대 3회 stale refresh가 중복·오래된 결과의 공개 효과를 막는다. worker는 60초 lease를 20초마다 DB/PGMQ에 함께 연장한다.
 
@@ -294,7 +295,7 @@ Book Context 저장·Provider·Builder의 상세 기준은 `docs/BOOK_CONTEXT_SP
 
 - `DeterministicPolicyEngine`은 DB·provider 호출이 없는 pure TypeScript rule engine이며 committed evaluation, 평가 당시 PUBLIC context, trigger와 optional host-help reason만 입력받는다.
 - 지표를 총점으로 합치지 않고 한 cycle에 `WAIT` 또는 정확히 하나의 목표만 만든다. Evaluator의 `suggestedAction`은 정책 권한이 없으며 결과에 영향을 주지 않는다.
-- phase/cursor, explicit host help, extension decision, cooldown, confidence와 좋은 인간 흐름 보존을 metric 조합보다 먼저 적용한다. `Expansion HIGH + Relevance HIGH + Activity HIGH`이면 낮은 Book Grounding 등 다른 약한 신호가 있어도 `WAIT`다.
+- phase/cursor, explicit host help, extension decision, cooldown, confidence와 좋은 인간 흐름 보존을 metric 조합보다 먼저 적용한다. `Expansion HIGH + Relevance HIGH + Activity HIGH`이면 낮은 Book Grounding 등 다른 약한 신호가 있어도 `WAIT`다. 단 실제 `SILENCE` trigger의 `silenceSeconds >= 60`은 Evaluator Activity가 오래된 HIGH여도 조용한 흐름을 복구하는 후보로 사용한다.
 - LOW 지속 규칙은 base Wiki에 저장된 직전 7개 metric과 현재 committed evaluation을 비교한다. Relevance LOW 한 번, Participation Balance LOW 단독, 좋은 확장 중 Book Grounding LOW는 자동 개입을 만들지 않는다.
 - 포화 상태는 한 문장에 여러 목표를 합치지 않고 평가 cycle별 `EXPAND → SUMMARIZE → TRANSITION`으로 진행한다.
 - 자동 개입 cooldown 초기 실험값은 90초다. 마지막 committed intervention뿐 아니라 아직 Host 처리를 기다리는 최근 non-WAIT Policy action도 cooldown에 포함하며, 명시적 방장 도움 요청과 정해진 연장 의견은 이 제한을 우회한다.
@@ -412,6 +413,12 @@ privacy, 무권한 접근, 공식 결과 불변성, 중복 확정과 탈퇴 후 
 현재 구현 상태(2026-09-03): Slice 0~8의 MVP 서버 범위가 완료되었다. Slice 6은 Synthesis, 5분 Closing, 개인 reflection, Final Wiki와 불변 Discussion Record를 durable Queue에 연결했다. Slice 7은 Kakao 도서 검색·서명 selection, 동일 판본 중복 방지, Book Context의 7단계 Builder, web research, Pack-level Review/Publish Gate, 재생성 proposal과 Admin API를 구현했다. Slice 8은 current-password 계정 탈퇴, AI_PRIVATE 삭제·공동 기여 익명화, Auth hard-delete recovery, 37일 restore tombstone, 90일 AI 진단 purge와 운영 배포·backup/restore 자산을 구현했다. API와 worker는 같은 container image에서 독립 command로 실행되고 API readiness와 worker heartbeat를 분리한다.
 
 Slice 6~8 검증(2026-09-02): `pnpm check`의 lint/typecheck/unit/build에서 code test 259개(contracts 45, domain 10, server 189, web 15)가 통과했고, local migration reset 뒤 24개 SQL file의 pgTAP 695개 assertion이 통과했다. 실제 model eval은 Evaluator·Opening·Host, Synthesis·Discussion Record와 Builder research·draft를 검증했다. Builder는 web research 7개 출처·22개 claim에서 7개 section·22개 item·28개 evidence link를 만들고 canonical 검증을 통과했다. Node 24.18 Docker image build와 API live/ready, worker SIGTERM graceful shutdown smoke도 통과했다. 원문은 eval 출력이나 진단 로그에 남기지 않았다.
+
+AI 지연 안정화 검증(2026-09-03): `pnpm check`의 lint/typecheck/unit/build와 code test 343개(contracts 49, domain 10, server 212, web 72)가 통과했다. 사용자 데이터가 남은 local DB에서도 전체 25개 SQL file, 731개 pgTAP assertion이 통과하도록 fixture query를 session/book/room 범위로 격리했다. 실제 `public-evaluator.v5` 3회는 7,455 input token, 1,532~1,583 output token, 10.0~58.2초였으며 모두 schema·semantic·Wiki commit gate를 통과했다. Opening 3.8초와 Host 2.8초도 함께 통과했고 모델 출력 원문은 기록하지 않았다.
+
+AI 침묵 fast path·근거 index 검증(2026-09-03): `public-evaluator.v6` provider output은 evidence UUID 객체 대신 catalog index를 사용하며 20,812-byte schema와 7,242 input token으로 실제 Luna Evaluator 3회를 10.0~13.9초에 통과했다. output은 923~1,464 token이었고 모두 index 복원 뒤 canonical schema·semantic·reference·Wiki commit gate를 통과했다. Terra Opening 3.4초와 Host 2.8초도 함께 통과했다. code test는 349개(contracts 49, domain 10, server 218, web 72), 사용자 데이터를 초기화하지 않은 local DB test는 25개 SQL file·739개 assertion이며 lint·typecheck·build와 Node 24.18 production image build도 통과했다. 59초에는 enqueue하지 않고 정확히 60초에는 enqueue하는 경계, worker-only 재사용 권한, active attempt·Wiki/cursor 일치, 새 메시지 race 시 fail-closed, 재사용 시 Provider 미호출을 각각 pgTAP과 unit fixture로 검증했다.
+
+AI Host v7 경량화·Opening 전환 검증(2026-09-03): Incremental schema에서 Provider `wikiPatch`를 제거하고 Pack relevance selection을 최대 8개로 제한했다. 실제 Luna 일반 Evaluator 3회는 15,878-byte schema·6,676 input token에서 8.9~12.0초에 통과했고, 서로 충돌하는 두 참가자의 합성 Opening 발언은 별도 관점과 `TRANSITION`으로 8.1초에 통과했다. Terra Opening은 2.6초, Host는 4.0초였다. code test는 356개(contracts 49, domain 10, server 225, web 72), local DB는 25개 SQL file·739개 assertion이 통과했으며 전체 lint·typecheck·test·build와 Node 24.18 production image build도 통과했다. 이번 v7 변경에는 새 DB migration이 없다.
 
 Slice 5-3 검증(2026-09-02): `pnpm check`의 lint/typecheck/unit/build가 통과했고 code test는 contracts 41개, domain 10개, server 74개, web 12개다. local migration reset 후 전체 15개 SQL test file, 452개 pgTAP assertion이 통과했다.
 

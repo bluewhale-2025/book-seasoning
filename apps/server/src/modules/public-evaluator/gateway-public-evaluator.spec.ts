@@ -27,8 +27,8 @@ describe("GatewayPublicEvaluator", () => {
     ).resolves.toEqual(PublicEvaluatorOutputV1Fixture);
 
     expect(calls[0]?.[1]).toMatchObject({
-      promptVersion: "public-evaluator.v4",
-      outputSchemaVersion: "public-evaluator-output.v1",
+      promptVersion: "public-evaluator.v7",
+      outputSchemaVersion: "public-evaluator-provider-observation.v3",
     });
     expect(calls[0]?.[2]).toMatchObject({
       context: evaluatorContext,
@@ -37,12 +37,15 @@ describe("GatewayPublicEvaluator", () => {
         baseWikiVersion: evaluatorContext.baseWiki?.version,
         targetThroughSeq: evaluatorContext.session.targetThroughSeq,
       },
-      allowedEvidenceRefs: expect.arrayContaining([
-        {
-          type: "MESSAGE",
-          messageId: evaluatorContext.messages[1]?.messageId,
-          seqNo: 4,
-        },
+      allowedEvidenceCatalog: expect.arrayContaining([
+        expect.objectContaining({
+          index: expect.any(Number),
+          reference: {
+            type: "MESSAGE",
+            messageId: evaluatorContext.messages[1]?.messageId,
+            seqNo: 4,
+          },
+        }),
       ]),
     });
   });

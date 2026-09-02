@@ -2,13 +2,11 @@ import { z } from "zod";
 
 import {
   AiConfidenceSchema,
-  BookContextItemEvidenceRefSchema,
   collectPublicEvidenceRefs,
   DiscussionMetricsV1Schema,
   InterventionNeedSchema,
   PolicyActionSchema,
   PublicAiShortTextSchema,
-  PublicEvidenceRefSchema,
 } from "./ai-common.js";
 import {
   LivingWikiBookGroundingSchema,
@@ -32,8 +30,15 @@ export const PublicEvaluatorOutputSchemaVersionSchema = z.literal(
  * deliberately applied by PublicEvaluatorOutputV1Schema after the server has
  * canonicalized opaque PUBLIC evidence identifiers from the exact context.
  */
-const ProviderEvidenceRefsSchema = z.array(PublicEvidenceRefSchema).max(24);
-const ProviderRequiredEvidenceRefsSchema = ProviderEvidenceRefsSchema.min(1);
+const ProviderEvidenceRefIndexesSchema = z
+  .array(z.int().min(0).max(999))
+  .max(24)
+  .meta({ id: "PublicEvaluatorEvidenceRefIndexesV2" });
+const ProviderRequiredEvidenceRefIndexesSchema = z
+  .array(z.int().min(0).max(999))
+  .min(1)
+  .max(24)
+  .meta({ id: "PublicEvaluatorRequiredEvidenceRefIndexesV2" });
 const providerMetricSchema = <
   const Low extends readonly [string, ...string[]],
   const Medium extends readonly [string, ...string[]],
@@ -43,98 +48,132 @@ const providerMetricSchema = <
     z.strictObject({
       level: z.literal("LOW"),
       reasonCodes: z.array(z.enum(codes.LOW)).min(1).max(4),
-      evidenceRefs: ProviderEvidenceRefsSchema,
+      evidenceRefIndexes: ProviderEvidenceRefIndexesSchema,
     }),
     z.strictObject({
       level: z.literal("MEDIUM"),
       reasonCodes: z.array(z.enum(codes.MEDIUM)).min(1).max(4),
-      evidenceRefs: ProviderEvidenceRefsSchema,
+      evidenceRefIndexes: ProviderEvidenceRefIndexesSchema,
     }),
     z.strictObject({
       level: z.literal("HIGH"),
       reasonCodes: z.array(z.enum(codes.HIGH)).min(1).max(4),
-      evidenceRefs: ProviderEvidenceRefsSchema,
+      evidenceRefIndexes: ProviderEvidenceRefIndexesSchema,
     }),
   ]);
-const ProviderMetricsSchema = z.strictObject({
-  depth: providerMetricSchema({
-    LOW: ["REACTIONS_OR_ASSERTIONS_ONLY"],
-    MEDIUM: ["REASONS_OR_BOOK_EVIDENCE_PRESENT"],
-    HIGH: [
-      "REASONS_AND_ASSUMPTIONS_COMPARED",
-      "COUNTERARGUMENTS_OR_REVISIONS_PRESENT",
-    ],
-  }),
-  expansion: providerMetricSchema({
-    LOW: ["VIEWPOINTS_REPEAT_WITHOUT_CONNECTION"],
-    MEDIUM: ["NEW_VIEW_WITH_WEAK_CONNECTION"],
-    HIGH: ["PERSPECTIVES_CONNECTED_AND_CONTRASTED", "NEW_ISSUE_EMERGED"],
-  }),
-  bookGrounding: providerMetricSchema({
-    LOW: ["BOOK_CONNECTION_NOT_OBSERVED"],
-    MEDIUM: ["BOOK_ORIGINATED_EXTENSION_CONTINUES", "BOOK_IDEA_REMAINS_ANCHOR"],
-    HIGH: ["SPECIFIC_BOOK_EVIDENCE_USED"],
-  }),
-  saturation: providerMetricSchema({
-    LOW: ["NEW_QUESTIONS_STILL_EMERGING"],
-    MEDIUM: ["EXPLORATION_REMAINS"],
-    HIGH: ["CLAIMS_AND_REASONS_REPEAT", "LITTLE_NEW_VALUE_OBSERVED"],
-  }),
-  participationBalance: providerMetricSchema({
-    LOW: ["ONE_MEANINGFUL_VIEW_DOMINATES"],
-    MEDIUM: ["SOME_ACTIVE_VIEWS_MISSING", "MULTIPLE_MEANINGFUL_VIEWS_PRESENT"],
-    HIGH: ["ACTIVE_VIEWS_BROADLY_REPRESENTED"],
-  }),
-  relevance: providerMetricSchema({
-    LOW: ["CURRENT_ISSUE_CONNECTION_WEAK"],
-    MEDIUM: ["RELATED_TANGENT_HAS_VALUE", "NEW_TOPIC_CANDIDATE_EMERGED"],
-    HIGH: ["CURRENT_ISSUE_REMAINS_FOCUSED"],
-  }),
-  activity: providerMetricSchema({
-    LOW: ["SILENCE_WITHOUT_RESPONSE", "FEW_RECENT_RESPONSES"],
-    MEDIUM: ["THINKING_PAUSE_PLAUSIBLE"],
-    HIGH: ["RESPONSES_ARE_CONTINUING"],
-  }),
-});
+const ProviderMetricsSchema = z
+  .strictObject({
+    depth: providerMetricSchema({
+      LOW: ["REACTIONS_OR_ASSERTIONS_ONLY"],
+      MEDIUM: ["REASONS_OR_BOOK_EVIDENCE_PRESENT"],
+      HIGH: [
+        "REASONS_AND_ASSUMPTIONS_COMPARED",
+        "COUNTERARGUMENTS_OR_REVISIONS_PRESENT",
+      ],
+    }),
+    expansion: providerMetricSchema({
+      LOW: ["VIEWPOINTS_REPEAT_WITHOUT_CONNECTION"],
+      MEDIUM: ["NEW_VIEW_WITH_WEAK_CONNECTION"],
+      HIGH: ["PERSPECTIVES_CONNECTED_AND_CONTRASTED", "NEW_ISSUE_EMERGED"],
+    }),
+    bookGrounding: providerMetricSchema({
+      LOW: ["BOOK_CONNECTION_NOT_OBSERVED"],
+      MEDIUM: [
+        "BOOK_ORIGINATED_EXTENSION_CONTINUES",
+        "BOOK_IDEA_REMAINS_ANCHOR",
+      ],
+      HIGH: ["SPECIFIC_BOOK_EVIDENCE_USED"],
+    }),
+    saturation: providerMetricSchema({
+      LOW: ["NEW_QUESTIONS_STILL_EMERGING"],
+      MEDIUM: ["EXPLORATION_REMAINS"],
+      HIGH: ["CLAIMS_AND_REASONS_REPEAT", "LITTLE_NEW_VALUE_OBSERVED"],
+    }),
+    participationBalance: providerMetricSchema({
+      LOW: ["ONE_MEANINGFUL_VIEW_DOMINATES"],
+      MEDIUM: [
+        "SOME_ACTIVE_VIEWS_MISSING",
+        "MULTIPLE_MEANINGFUL_VIEWS_PRESENT",
+      ],
+      HIGH: ["ACTIVE_VIEWS_BROADLY_REPRESENTED"],
+    }),
+    relevance: providerMetricSchema({
+      LOW: ["CURRENT_ISSUE_CONNECTION_WEAK"],
+      MEDIUM: ["RELATED_TANGENT_HAS_VALUE", "NEW_TOPIC_CANDIDATE_EMERGED"],
+      HIGH: ["CURRENT_ISSUE_REMAINS_FOCUSED"],
+    }),
+    activity: providerMetricSchema({
+      LOW: ["SILENCE_WITHOUT_RESPONSE", "FEW_RECENT_RESPONSES"],
+      MEDIUM: ["THINKING_PAUSE_PLAUSIBLE"],
+      HIGH: ["RESPONSES_ARE_CONTINUING"],
+    }),
+  })
+  .meta({ id: "PublicEvaluatorMetricsV1" });
 const ProviderCurrentTopicSchema = z.strictObject({
-  ...LivingWikiCurrentTopicSchema.shape,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
-});
+  topicId: LivingWikiCurrentTopicSchema.shape.topicId,
+  title: LivingWikiCurrentTopicSchema.shape.title,
+  guidingQuestion: LivingWikiCurrentTopicSchema.shape.guidingQuestion,
+  transitionedFromTopicId:
+    LivingWikiCurrentTopicSchema.shape.transitionedFromTopicId,
+  changeSummary: LivingWikiCurrentTopicSchema.shape.changeSummary,
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
+}).meta({ id: "PublicEvaluatorCurrentTopicV2" });
 const ProviderPerspectiveRelationSchema = z.strictObject({
-  ...LivingWikiPerspectiveRelationSchema.shape,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
-});
+  targetPerspectiveId:
+    LivingWikiPerspectiveRelationSchema.shape.targetPerspectiveId,
+  relation: LivingWikiPerspectiveRelationSchema.shape.relation,
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
+}).meta({ id: "PublicEvaluatorPerspectiveRelationV2" });
 const ProviderPerspectiveSchema = z.strictObject({
-  ...LivingWikiPerspectiveSchema.shape,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
+  perspectiveId: LivingWikiPerspectiveSchema.shape.perspectiveId,
+  summary: LivingWikiPerspectiveSchema.shape.summary,
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
   relations: z.array(ProviderPerspectiveRelationSchema).max(20),
-});
+}).meta({ id: "PublicEvaluatorPerspectiveV2" });
 const ProviderBookGroundingSchema = z.strictObject({
-  ...LivingWikiBookGroundingSchema.shape,
-  bookContextItemRef: BookContextItemEvidenceRefSchema,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
-});
+  groundingId: LivingWikiBookGroundingSchema.shape.groundingId,
+  summary: LivingWikiBookGroundingSchema.shape.summary,
+  bookContextItemRefIndex: z.int().min(0).max(999),
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
+  connectedPerspectiveIds:
+    LivingWikiBookGroundingSchema.shape.connectedPerspectiveIds,
+}).meta({ id: "PublicEvaluatorBookGroundingV2" });
 const ProviderIssueOrQuestionSchema = z.strictObject({
-  ...LivingWikiIssueOrQuestionSchema.shape,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
-});
+  issueOrQuestionId:
+    LivingWikiIssueOrQuestionSchema.shape.issueOrQuestionId,
+  kind: LivingWikiIssueOrQuestionSchema.shape.kind,
+  text: LivingWikiIssueOrQuestionSchema.shape.text,
+  status: LivingWikiIssueOrQuestionSchema.shape.status,
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
+  relatedPerspectiveIds:
+    LivingWikiIssueOrQuestionSchema.shape.relatedPerspectiveIds,
+}).meta({ id: "PublicEvaluatorIssueOrQuestionV2" });
 const ProviderCoverageSchema = z.strictObject({
-  ...LivingWikiCoverageSchema.shape,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
-});
+  subjectType: LivingWikiCoverageSchema.shape.subjectType,
+  subjectId: LivingWikiCoverageSchema.shape.subjectId,
+  level: LivingWikiCoverageSchema.shape.level,
+  rationale: LivingWikiCoverageSchema.shape.rationale,
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
+}).meta({ id: "PublicEvaluatorCoverageV2" });
 const ProviderParticipantStateSchema = z.strictObject({
-  ...LivingWikiPublicParticipantStateSchema.shape,
-  evidenceRefs: ProviderEvidenceRefsSchema,
-});
+  participantId: LivingWikiPublicParticipantStateSchema.shape.participantId,
+  attendance: LivingWikiPublicParticipantStateSchema.shape.attendance,
+  recentActivity:
+    LivingWikiPublicParticipantStateSchema.shape.recentActivity,
+  publiclyExpressedPosition:
+    LivingWikiPublicParticipantStateSchema.shape.publiclyExpressedPosition,
+  evidenceRefIndexes: ProviderEvidenceRefIndexesSchema,
+}).meta({ id: "PublicEvaluatorParticipantStateV2" });
 const ProviderKeyChangeSchema = z.strictObject({
-  ...LivingWikiKeyChangeSchema.shape,
-  evidenceRefs: ProviderRequiredEvidenceRefsSchema,
-});
+  changeId: LivingWikiKeyChangeSchema.shape.changeId,
+  description: LivingWikiKeyChangeSchema.shape.description,
+  evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
+}).meta({ id: "PublicEvaluatorKeyChangeV2" });
 const ProviderMetricsAndKeyChangesSchema = z.strictObject({
   metrics: ProviderMetricsSchema,
   summary: PublicAiShortTextSchema,
   keyChanges: z.array(ProviderKeyChangeSchema).max(30),
-});
+}).meta({ id: "PublicEvaluatorMetricsAndKeyChangesV1" });
 const ProviderPatchOperationSchema = z.discriminatedUnion("operation", [
   z.strictObject({
     operation: z.literal("SET_CURRENT_TOPIC"),
@@ -150,7 +189,7 @@ const ProviderPatchOperationSchema = z.discriminatedUnion("operation", [
     operation: z.literal("REMOVE_PERSPECTIVE"),
     baseVersion: z.int().nonnegative(),
     perspectiveId: z.uuid(),
-    evidenceRefs: ProviderRequiredEvidenceRefsSchema,
+    evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
   }),
   z.strictObject({
     operation: z.literal("UPSERT_BOOK_GROUNDING"),
@@ -161,7 +200,7 @@ const ProviderPatchOperationSchema = z.discriminatedUnion("operation", [
     operation: z.literal("REMOVE_BOOK_GROUNDING"),
     baseVersion: z.int().nonnegative(),
     groundingId: z.uuid(),
-    evidenceRefs: ProviderRequiredEvidenceRefsSchema,
+    evidenceRefIndexes: ProviderRequiredEvidenceRefIndexesSchema,
   }),
   z.strictObject({
     operation: z.literal("UPSERT_ISSUE_OR_QUESTION"),
@@ -183,15 +222,15 @@ const ProviderPatchOperationSchema = z.discriminatedUnion("operation", [
     baseVersion: z.int().nonnegative(),
     metricsAndKeyChanges: ProviderMetricsAndKeyChangesSchema,
   }),
-]);
+]).meta({ id: "PublicEvaluatorPatchOperationV1" });
 const ProviderPatchSchema = z.strictObject({
   schemaVersion: LivingWikiPatchSchemaVersionSchema,
   baseVersion: z.int().nonnegative(),
   basedThroughSeq: z.int().nonnegative(),
   operations: z.array(ProviderPatchOperationSchema).max(100),
-});
+}).meta({ id: "PublicEvaluatorPatchV1" });
 
-export const PublicEvaluatorProviderOutputV1Schema = z.strictObject({
+export const PublicEvaluatorProviderOutputV2Schema = z.strictObject({
   schemaVersion: PublicEvaluatorOutputSchemaVersionSchema,
   packVersionId: z.uuid(),
   baseWikiVersion: z.int().nonnegative(),
@@ -207,6 +246,16 @@ export const PublicEvaluatorProviderOutputV1Schema = z.strictObject({
   suggestedAction: PolicyActionSchema,
   wikiPatch: ProviderPatchSchema,
 });
+
+/**
+ * Fast incremental observation contract. Incremental Living Wiki operations
+ * are projected deterministically by the server from these validated fields;
+ * only checkpoint/final tasks ask the provider to author semantic patches.
+ */
+export const PublicEvaluatorProviderObservationV3Schema =
+  PublicEvaluatorProviderOutputV2Schema.omit({ wikiPatch: true }).meta({
+    id: "PublicEvaluatorProviderObservationV3",
+  });
 
 export const PublicEvaluatorOutputV1Schema = z
   .strictObject({
@@ -268,4 +317,12 @@ export const PublicEvaluatorOutputV1Schema = z
 
 export type PublicEvaluatorOutputV1 = z.infer<
   typeof PublicEvaluatorOutputV1Schema
+>;
+
+export type PublicEvaluatorProviderOutputV2 = z.infer<
+  typeof PublicEvaluatorProviderOutputV2Schema
+>;
+
+export type PublicEvaluatorProviderObservationV3 = z.infer<
+  typeof PublicEvaluatorProviderObservationV3Schema
 >;

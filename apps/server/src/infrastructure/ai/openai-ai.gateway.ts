@@ -8,7 +8,9 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { ZodError } from "zod";
 
 import {
+  AiProviderRequestMetricsV1Schema,
   AiProviderRunV1Schema,
+  type AiProviderRequestMetricsV1,
   type AiReasoningEffort,
 } from "@bookseasoning/contracts/internal";
 
@@ -59,12 +61,24 @@ export class OpenAiGateway implements AiGateway {
   ): Promise<AiGatewayResult<T>> {
     if (this.client === undefined) throw new AiGatewayUnavailableError();
     const model = this.modelFor(task.modelAlias);
+    const serializedInput = JSON.stringify(input);
+    const textFormat = zodTextFormat(task.outputSchema, task.outputSchemaName);
+    const inputBytes = Buffer.byteLength(serializedInput);
+    const instructionsBytes = Buffer.byteLength(task.instructions);
+    const outputSchemaBytes = Buffer.byteLength(JSON.stringify(textFormat));
+    const requestMetrics = AiProviderRequestMetricsV1Schema.parse({
+      inputBytes,
+      instructionsBytes,
+      outputSchemaBytes,
+      totalRequestBytes: inputBytes + instructionsBytes + outputSchemaBytes,
+      maxOutputTokens: task.maxOutputTokens,
+    });
     const startedAt = performance.now();
     try {
       const response = await this.client.responses.parse({
         model,
         instructions: task.instructions,
-        input: JSON.stringify(input),
+        input: serializedInput,
         reasoning: { effort: task.reasoningEffort },
         max_output_tokens: task.maxOutputTokens,
         store: false,
@@ -72,7 +86,7 @@ export class OpenAiGateway implements AiGateway {
           ? { tools: [{ type: "web_search" as const }] }
           : {}),
         text: {
-          format: zodTextFormat(task.outputSchema, task.outputSchemaName),
+          format: textFormat,
         },
       });
       const latencyMs = Math.max(0, Math.round(performance.now() - startedAt));
@@ -85,7 +99,7 @@ export class OpenAiGateway implements AiGateway {
             ? "AI_PROVIDER_OUTPUT_LIMIT"
             : "AI_PROVIDER_STRUCTURED_OUTPUT_MISSING",
           !outputLimitReached,
-          this.failureRun(task, model, latencyMs),
+          this.failureRun(task, model, latencyMs, requestMetrics),
         );
       }
       const output = task.outputSchema.parse(response.output_parsed);
@@ -100,11 +114,14 @@ export class OpenAiGateway implements AiGateway {
         reasoningEffort: task.reasoningEffort,
         responseId: response.id,
         latencyMs,
+        requestMetrics,
         usage:
           usage === null || usage === undefined
             ? null
             : {
                 inputTokens: usage.input_tokens,
+                cachedInputTokens:
+                  usage.input_tokens_details?.cached_tokens ?? 0,
                 outputTokens: usage.output_tokens,
                 reasoningTokens: usage.output_tokens_details.reasoning_tokens,
                 totalTokens: usage.total_tokens,
@@ -117,7 +134,7 @@ export class OpenAiGateway implements AiGateway {
       throw new AiGatewayInvocationError(
         this.errorCode(error),
         this.isRetryable(error),
-        this.failureRun(task, model, latencyMs),
+        this.failureRun(task, model, latencyMs, requestMetrics),
       );
     }
   }
@@ -132,6 +149,7 @@ export class OpenAiGateway implements AiGateway {
     task: AiStructuredTask<T>,
     model: string,
     latencyMs: number,
+    requestMetrics: AiProviderRequestMetricsV1,
   ): AiGatewayFailureRun {
     return {
       taskAlias: task.taskAlias,
@@ -141,6 +159,7 @@ export class OpenAiGateway implements AiGateway {
       model,
       reasoningEffort: task.reasoningEffort as AiReasoningEffort,
       latencyMs,
+      requestMetrics,
     };
   }
 

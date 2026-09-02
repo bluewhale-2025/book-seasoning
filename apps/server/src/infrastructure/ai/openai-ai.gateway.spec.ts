@@ -3,6 +3,7 @@ import {
   APIConnectionError,
   APIConnectionTimeoutError,
 } from "openai";
+import { zodTextFormat } from "openai/helpers/zod";
 
 import {
   OpeningOutputV1Fixture,
@@ -14,7 +15,10 @@ import {
   AiGatewayUnavailableError,
 } from "../../modules/ai-provider/ai-gateway.js";
 import type { AiGatewayInvocationError } from "../../modules/ai-provider/ai-gateway.js";
-import { openingTask } from "../../modules/ai-provider/ai-task.catalog.js";
+import {
+  openingTask,
+  publicEvaluatorTask,
+} from "../../modules/ai-provider/ai-task.catalog.js";
 import { bookBuilderResearchTask } from "../../modules/book-builder/book-builder.tasks.js";
 import {
   OpenAiGateway,
@@ -40,6 +44,40 @@ const input = {
 } as unknown as OpeningContextV1;
 
 describe("OpenAiGateway", () => {
+  it("keeps the evaluator provider schema and output budgets bounded", () => {
+    const incremental = publicEvaluatorTask("INCREMENTAL");
+    const checkpoint = publicEvaluatorTask("TOPIC_CHECKPOINT");
+    const final = publicEvaluatorTask("FINAL");
+    const format = zodTextFormat(
+      incremental.outputSchema,
+      incremental.outputSchemaName,
+    );
+    const checkpointFormat = zodTextFormat(
+      checkpoint.outputSchema,
+      checkpoint.outputSchemaName,
+    );
+
+    expect(JSON.stringify(format).length).toBeLessThanOrEqual(24_000);
+    expect(JSON.stringify(format)).not.toContain('"wikiPatch"');
+    expect(JSON.stringify(format).length).toBeLessThan(
+      JSON.stringify(checkpointFormat).length,
+    );
+    expect(incremental.promptVersion).toBe("public-evaluator.v7");
+    expect(incremental.outputSchemaVersion).toBe(
+      "public-evaluator-provider-observation.v3",
+    );
+    expect(checkpoint.outputSchemaVersion).toBe(
+      "public-evaluator-provider-output.v2",
+    );
+    expect(incremental.maxOutputTokens).toBe(6_000);
+    expect(checkpoint.maxOutputTokens).toBe(8_000);
+    expect(final.maxOutputTokens).toBe(12_000);
+    expect(incremental.instructions).toContain("wikiPatch를 출력하지 않는다");
+    expect(checkpoint.instructions).toContain("wikiPatch에서 반복하지 않는다");
+    expect(incremental.instructions).toContain("별도 majorPerspective");
+    expect(incremental.instructions).toContain("allowedEvidenceCatalog");
+  });
+
   it("uses stateless non-streaming Responses Structured Outputs", async () => {
     let request: Record<string, unknown> | undefined;
     const client = {
@@ -51,6 +89,10 @@ describe("OpenAiGateway", () => {
             output_parsed: OpeningOutputV1Fixture,
             usage: {
               input_tokens: 100,
+              input_tokens_details: {
+                cached_tokens: 40,
+                cache_write_tokens: 0,
+              },
               output_tokens: 30,
               total_tokens: 130,
               output_tokens_details: { reasoning_tokens: 10 },
@@ -69,8 +111,16 @@ describe("OpenAiGateway", () => {
       model: "host-model",
       taskAlias: "OPENING_V1",
       promptVersion: "opening.v1",
+      requestMetrics: {
+        inputBytes: expect.any(Number),
+        instructionsBytes: expect.any(Number),
+        outputSchemaBytes: expect.any(Number),
+        totalRequestBytes: expect.any(Number),
+        maxOutputTokens: openingTask.maxOutputTokens,
+      },
       usage: {
         inputTokens: 100,
+        cachedInputTokens: 40,
         outputTokens: 30,
         reasoningTokens: 10,
         totalTokens: 130,
@@ -179,6 +229,12 @@ describe("OpenAiGateway", () => {
         name: "AiGatewayInvocationError",
         code,
         retryable: true,
+        run: expect.objectContaining({
+          requestMetrics: expect.objectContaining({
+            totalRequestBytes: expect.any(Number),
+            maxOutputTokens: openingTask.maxOutputTokens,
+          }),
+        }),
       } satisfies Partial<AiGatewayInvocationError>),
     );
   });
