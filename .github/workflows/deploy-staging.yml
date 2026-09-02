@@ -1,0 +1,351 @@
+name: Deploy staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Verify and deploy staging release
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      AMPLIFY_APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+      LIGHTSAIL_SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
+      CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      WORKER_DATABASE_URL: ${{ secrets.WORKER_DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      COMMAND_FINGERPRINT_KEY: ${{ secrets.COMMAND_FINGERPRINT_KEY }}
+
+    steps:
+      - name: Check out staging
+        uses: actions/checkout@v7
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_names=(
+            AWS_REGION
+            AWS_ROLE_ARN
+            AMPLIFY_APP_ID
+            LIGHTSAIL_SERVICE_NAME
+            CORS_ORIGINS
+            SUPABASE_URL
+            SUPABASE_PUBLISHABLE_KEY
+            SUPABASE_DB_URL
+            SUPABASE_SECRET_KEY
+            WORKER_DATABASE_URL
+            OPENAI_API_KEY
+            COMMAND_FINGERPRINT_KEY
+          )
+
+          missing=()
+          for name in "${required_names[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "Missing staging Environment values: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Set up Node and pnpm
+        uses: pnpm/setup@v2
+        with:
+          version: 11.25.0
+          runtime: node@24.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify application
+        run: pnpm check
+
+      - name: Start local Supabase for database checks
+        run: pnpm db:start
+
+      - name: Verify database migrations
+        run: pnpm check:db
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm db:stop
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "168692730364"
+          role-session-name: bookseasoning-staging-${{ github.run_id }}
+
+      - name: Apply Supabase migrations
+        run: pnpm exec supabase db push --db-url "$SUPABASE_DB_URL"
+
+      - name: Build server image
+        env:
+          LOCAL_IMAGE: bookseasoning-server:${{ github.sha }}
+        run: docker build --tag "$LOCAL_IMAGE" .
+
+      - name: Install Lightsail container plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --output /tmp/lightsailctl \
+            https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl
+          chmod +x /tmp/lightsailctl
+          sudo install /tmp/lightsailctl /usr/local/bin/lightsailctl
+
+      - name: Push image to Lightsail
+        id: image
+        shell: bash
+        env:
+          LOCAL_IMAGE: bookseasoning-server:${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          image_label="server-${GITHUB_SHA:0:12}"
+          aws lightsail push-container-image \
+            --region "$AWS_REGION" \
+            --service-name "$LIGHTSAIL_SERVICE_NAME" \
+            --label "$image_label" \
+            --image "$LOCAL_IMAGE"
+
+          image_reference="$(
+            aws lightsail get-container-images \
+              --region "$AWS_REGION" \
+              --service-name "$LIGHTSAIL_SERVICE_NAME" \
+              --query "containerImages[?contains(image, '.${image_label}.')].image | [0]" \
+              --output text
+          )"
+
+          if [[ -z "$image_reference" || "$image_reference" == "None" ]]; then
+            echo "Could not resolve the registered Lightsail image." >&2
+            exit 1
+          fi
+
+          echo "reference=$image_reference" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy API and worker
+        id: deployment
+        shell: bash
+        env:
+          IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
+          RELEASE_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          deployment_version="$(bash scripts/deploy-lightsail.sh)"
+          echo "version=$deployment_version" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for deployment
+        shell: bash
+        env:
+          DEPLOYMENT_VERSION: ${{ steps.deployment.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 60); do
+            deployment_state="$(
+              aws lightsail get-container-service-deployments \
+                --region "$AWS_REGION" \
+                --service-name "$LIGHTSAIL_SERVICE_NAME" \
+                --output json \
+                | jq -r --argjson version "$DEPLOYMENT_VERSION" \
+                    '.deployments[] | select(.version == $version) | .state' \
+                | head -n 1
+            )"
+
+            case "$deployment_state" in
+              ACTIVE)
+                echo "Lightsail deployment $DEPLOYMENT_VERSION is active."
+                exit 0
+                ;;
+              FAILED)
+                echo "Lightsail deployment $DEPLOYMENT_VERSION failed." >&2
+                exit 1
+                ;;
+              *)
+                echo "Attempt $attempt/60: deployment state is ${deployment_state:-unknown}."
+                sleep 10
+                ;;
+            esac
+          done
+
+          echo "Timed out waiting for Lightsail deployment $DEPLOYMENT_VERSION." >&2
+          exit 1
+
+      - name: Check API readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          service_url="$(
+            aws lightsail get-container-services \
+              --region "$AWS_REGION" \
+              --service-name "$LIGHTSAIL_SERVICE_NAME" \
+              --query 'containerServices[0].url' \
+              --output text
+          )"
+
+          if [[ -z "$service_url" || "$service_url" == "None" ]]; then
+            echo "Could not resolve the Lightsail service URL." >&2
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            --retry 12 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            "$service_url/health/ready"
+
+      - name: Verify Amplify staging release boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$AMPLIFY_APP_ID" =~ ^d[a-z0-9]+$ ]]; then
+            echo "AMPLIFY_APP_ID has an invalid format." >&2
+            exit 1
+          fi
+
+          branch_json="$(
+            aws amplify get-branch \
+              --region "$AWS_REGION" \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name staging \
+              --output json
+          )"
+          auto_build="$(jq -r '.branch.enableAutoBuild' <<<"$branch_json")"
+          if [[ "$auto_build" != "false" ]]; then
+            echo "Amplify staging auto-build must be disabled; GitHub Actions owns release order." >&2
+            exit 1
+          fi
+
+      - name: Deploy web to Amplify
+        id: amplify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          job_json="$(
+            aws amplify start-job \
+              --region "$AWS_REGION" \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name staging \
+              --job-type RELEASE \
+              --commit-id "$GITHUB_SHA" \
+              --job-reason "GitHub Actions staging release" \
+              --output json
+          )"
+          job_id="$(jq -r '.jobSummary.jobId' <<<"$job_json")"
+          commit_id="$(jq -r '.jobSummary.commitId' <<<"$job_json")"
+          if [[ -z "$job_id" || "$job_id" == "null" ]]; then
+            echo "Amplify did not return a job id." >&2
+            exit 1
+          fi
+          if [[ "$commit_id" != "$GITHUB_SHA" ]]; then
+            aws amplify stop-job \
+              --region "$AWS_REGION" \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name staging \
+              --job-id "$job_id" >/dev/null
+            echo "Amplify selected commit $commit_id instead of the verified commit." >&2
+            exit 1
+          fi
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Amplify deployment
+        shell: bash
+        env:
+          AMPLIFY_JOB_ID: ${{ steps.amplify.outputs.job_id }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 60); do
+            job_json="$(
+              aws amplify get-job \
+                --region "$AWS_REGION" \
+                --app-id "$AMPLIFY_APP_ID" \
+                --branch-name staging \
+                --job-id "$AMPLIFY_JOB_ID" \
+                --output json
+            )"
+            status="$(jq -r '.job.summary.status' <<<"$job_json")"
+            commit_id="$(jq -r '.job.summary.commitId' <<<"$job_json")"
+
+            if [[ "$commit_id" != "$GITHUB_SHA" ]]; then
+              aws amplify stop-job \
+                --region "$AWS_REGION" \
+                --app-id "$AMPLIFY_APP_ID" \
+                --branch-name staging \
+                --job-id "$AMPLIFY_JOB_ID" >/dev/null || true
+              echo "Amplify job commit changed from the verified release." >&2
+              exit 1
+            fi
+
+            case "$status" in
+              SUCCEED)
+                echo "Amplify job $AMPLIFY_JOB_ID succeeded."
+                exit 0
+                ;;
+              FAILED|CANCELLED)
+                echo "Amplify job $AMPLIFY_JOB_ID ended with $status." >&2
+                exit 1
+                ;;
+              *)
+                echo "Attempt $attempt/60: Amplify status is ${status:-unknown}."
+                sleep 10
+                ;;
+            esac
+          done
+
+          echo "Timed out waiting for Amplify job $AMPLIFY_JOB_ID." >&2
+          exit 1
+
+      - name: Check Amplify route and security headers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          default_domain="$(
+            aws amplify get-app \
+              --region "$AWS_REGION" \
+              --app-id "$AMPLIFY_APP_ID" \
+              --query 'app.defaultDomain' \
+              --output text
+          )"
+          header_file="$(mktemp)"
+          trap 'rm -f "$header_file"' EXIT
+          curl --fail --silent --show-error \
+            --retry 12 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            --dump-header "$header_file" \
+            --output /dev/null \
+            "https://staging.${default_domain}/auth/login"
+          grep -qi '^content-security-policy:' "$header_file"
+          grep -qi '^strict-transport-security:' "$header_file"
+          grep -qi '^cache-control:.*max-age=0' "$header_file"
