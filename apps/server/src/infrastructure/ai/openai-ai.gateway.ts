@@ -76,9 +76,14 @@ export class OpenAiGateway implements AiGateway {
       });
       const latencyMs = Math.max(0, Math.round(performance.now() - startedAt));
       if (response.output_parsed === null) {
+        const outputLimitReached =
+          response.status === "incomplete" &&
+          response.incomplete_details?.reason === "max_output_tokens";
         throw new AiGatewayInvocationError(
-          "AI_PROVIDER_STRUCTURED_OUTPUT_MISSING",
-          true,
+          outputLimitReached
+            ? "AI_PROVIDER_OUTPUT_LIMIT"
+            : "AI_PROVIDER_STRUCTURED_OUTPUT_MISSING",
+          !outputLimitReached,
           this.failureRun(task, model, latencyMs),
         );
       }

@@ -20,10 +20,10 @@ for command_name in aws jq; do
   }
 done
 
-openai_timeout_ms="${OPENAI_TIMEOUT_MS:-60000}"
+openai_timeout_ms="${OPENAI_TIMEOUT_MS:-120000}"
 if [[ ! "$openai_timeout_ms" =~ ^[0-9]+$ ]] \
-  || (( openai_timeout_ms < 1000 || openai_timeout_ms > 60000 )); then
-  printf 'OPENAI_TIMEOUT_MS must be an integer between 1000 and 60000.\n' >&2
+  || (( openai_timeout_ms < 1000 || openai_timeout_ms > 120000 )); then
+  printf 'OPENAI_TIMEOUT_MS must be an integer between 1000 and 120000.\n' >&2
   exit 2
 fi
 

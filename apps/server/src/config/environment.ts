@@ -25,7 +25,7 @@ const EnvironmentSchema = z.object({
   OPENAI_API_KEY: z.string().min(20).optional(),
   OPENAI_EVALUATOR_MODEL: z.string().min(1).max(100).default("gpt-5.6-luna"),
   OPENAI_HOST_MODEL: z.string().min(1).max(100).default("gpt-5.6-terra"),
-  OPENAI_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(20_000),
+  OPENAI_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
   COMMAND_FINGERPRINT_KEY: z.string().min(32).optional(),
 });
 

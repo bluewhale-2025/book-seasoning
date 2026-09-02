@@ -114,6 +114,30 @@ describe("OpenAiGateway", () => {
     );
   });
 
+  it("does not retry an incomplete response that exhausted its output budget", async () => {
+    const client = {
+      responses: {
+        parse: () =>
+          Promise.resolve({
+            id: "resp_incomplete",
+            status: "incomplete",
+            incomplete_details: { reason: "max_output_tokens" },
+            output_parsed: null,
+            usage: null,
+          }),
+      },
+    } as unknown as OpenAiClient;
+    const subject = new OpenAiGateway(environment, client);
+
+    await expect(subject.generate(openingTask, input)).rejects.toEqual(
+      expect.objectContaining({
+        name: "AiGatewayInvocationError",
+        code: "AI_PROVIDER_OUTPUT_LIMIT",
+        retryable: false,
+      } satisfies Partial<AiGatewayInvocationError>),
+    );
+  });
+
   it.each([
     [new APIConnectionTimeoutError(), "AI_PROVIDER_TIMEOUT"],
     [new APIConnectionError({ message: "offline" }), "AI_PROVIDER_CONNECTION_FAILED"],
