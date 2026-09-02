@@ -71,11 +71,12 @@ jobs:
           fi
 
       - name: Set up Node and pnpm
+        id: pnpm-setup
         uses: pnpm/setup@v2
         with:
           version: 11.25.0
           runtime: node@24.18.0
-          cache: pnpm
+          cache: true
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -90,8 +91,8 @@ jobs:
         run: pnpm check:db
 
       - name: Stop local Supabase
-        if: always()
-        run: pnpm db:stop
+        if: always() && steps.pnpm-setup.outcome == 'success'
+        run: pnpm db:stop || true
 
       - name: Configure AWS credentials through GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v6.2.3
