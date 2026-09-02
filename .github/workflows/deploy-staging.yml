@@ -15,8 +15,50 @@ permissions:
   id-token: write
 
 jobs:
+  verify-aws-identity:
+    name: Verify staging AWS identity
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 5
+    steps:
+      - name: Report GitHub OIDC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          oidc_response="$(
+            curl --fail --silent --show-error \
+              --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com"
+          )"
+          oidc_token="$(jq -r '.value' <<<"$oidc_response")"
+
+          OIDC_TOKEN="$oidc_token" node --input-type=module <<'NODE'
+          const token = process.env.OIDC_TOKEN;
+          const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+          const visibleClaims = {
+            iss: payload.iss,
+            aud: payload.aud,
+            sub: payload.sub,
+            repository: payload.repository,
+            ref: payload.ref,
+            environment: payload.environment,
+          };
+          console.log(JSON.stringify(visibleClaims, null, 2));
+          NODE
+
+      - name: Assume staging deployment role
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: "168692730364"
+          role-session-name: bookseasoning-staging-preflight-${{ github.run_id }}
+          retry-max-attempts: 1
+
   deploy:
     name: Verify and deploy staging release
+    needs: verify-aws-identity
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 45
