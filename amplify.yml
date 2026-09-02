@@ -15,7 +15,7 @@ applications:
             - node scripts/verify-web-build-environment.mjs
         build:
           commands:
-            - pnpm --filter @bookseasoning/web build
+            - pnpm --filter @bookseasoning/web... build
       artifacts:
         baseDirectory: apps/web/dist
         files:
