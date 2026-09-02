@@ -45,6 +45,7 @@ jq -n \
       api: {
         image: $image,
         command: ["node","dist/api/main.js"],
+        ports: {"3000": "HTTP"},
         environment: {
           NODE_ENV: "production", SERVER_HOST: "0.0.0.0", SERVER_PORT: "3000",
           LOG_LEVEL: "info", RELEASE_VERSION: $release, CORS_ORIGINS: $cors,
