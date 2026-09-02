@@ -20,6 +20,13 @@ for command_name in aws jq; do
   }
 done
 
+openai_timeout_ms="${OPENAI_TIMEOUT_MS:-60000}"
+if [[ ! "$openai_timeout_ms" =~ ^[0-9]+$ ]] \
+  || (( openai_timeout_ms < 1000 || openai_timeout_ms > 60000 )); then
+  printf 'OPENAI_TIMEOUT_MS must be an integer between 1000 and 60000.\n' >&2
+  exit 2
+fi
+
 deploy_dir="$(mktemp -d "${TMPDIR:-/tmp}/bookseasoning-deploy.XXXXXX")"
 deployment_path="${deploy_dir}/deployment.json"
 cleanup() {
@@ -39,6 +46,7 @@ jq -n \
   --arg openAi "$OPENAI_API_KEY" \
   --arg evaluator "${OPENAI_EVALUATOR_MODEL:-gpt-5.6-luna}" \
   --arg host "${OPENAI_HOST_MODEL:-gpt-5.6-terra}" \
+  --arg openAiTimeout "$openai_timeout_ms" \
   --arg fingerprint "$COMMAND_FINGERPRINT_KEY" \
   '{
     containers: {
@@ -62,7 +70,7 @@ jq -n \
           SUPABASE_PUBLISHABLE_KEY: $publishable, SUPABASE_SECRET_KEY: $secret,
           WORKER_DATABASE_URL: $database, OPENAI_API_KEY: $openAi,
           OPENAI_EVALUATOR_MODEL: $evaluator, OPENAI_HOST_MODEL: $host,
-          OPENAI_TIMEOUT_MS: "20000", COMMAND_FINGERPRINT_KEY: $fingerprint
+          OPENAI_TIMEOUT_MS: $openAiTimeout, COMMAND_FINGERPRINT_KEY: $fingerprint
         }
       }
     },
