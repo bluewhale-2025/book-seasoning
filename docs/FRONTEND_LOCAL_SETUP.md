@@ -89,6 +89,7 @@ WORKER_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
 COMMAND_FINGERPRINT_KEY=<32자 이상의 local 전용 임의 문자열>
 OPENAI_API_KEY=<실제 AI/Builder를 검증할 때만 설정>
+KAKAO_REST_API_KEY=<Admin 도서 검색을 검증할 때 설정>
 ```
 
 local publishable/secret key는 `pnpm db:start` 또는 `pnpm exec supabase status` 출력에서 가져온다. legacy anon/service-role key 대신 현재 `sb_publishable_...`, `sb_secret_...` 형식을 사용한다. 값을 terminal 기록, screenshot, 이 문서에 복사하지 않는다.
@@ -223,7 +224,7 @@ where user_id = (
 
 이 SQL은 local 개발 전용이다. staging/production role 변경 절차로 사용하지 않는다.
 
-Admin으로 Pack을 생성하면 Worker가 7단계 Builder를 처리한다. 실제 Builder 완료에는 `WORKER_DATABASE_URL`과 `OPENAI_API_KEY`가 모두 필요하다. 완료 후 Draft 검수 → Review → Publish해야 일반 `GET /v1/books`에 나타난다.
+Admin은 `KAKAO_REST_API_KEY`가 설정된 API에서 제목·저자·ISBN으로 책을 검색하고 정확한 판본을 선택한다. Pack을 생성하면 Worker가 7단계 Builder를 처리한다. 실제 Builder 완료에는 `WORKER_DATABASE_URL`과 `OPENAI_API_KEY`가 모두 필요하다. 완료 후 전체 내용을 수정·삭제하고 `전체 검수 완료` → `게시`해야 일반 `GET /v1/books`에 나타난다.
 
 실제 모델을 사용하지 않는 프론트 개발에서는 Admin/Pack fixture를 사용하고, contract 통합 단계에서만 실제 Builder를 실행한다.
 

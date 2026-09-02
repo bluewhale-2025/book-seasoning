@@ -77,7 +77,7 @@ export class AiJobProcessor {
           ? error.code
           : "UNCLASSIFIED_RETRYABLE_FAILURE";
       if (job.attemptNo >= job.maxAttempts) {
-        await this.completeTerminalFailure(job, "ATTEMPTS_EXHAUSTED");
+        await this.completeTerminalFailure(job, errorCode);
         return;
       }
 

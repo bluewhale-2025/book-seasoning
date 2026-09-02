@@ -309,12 +309,13 @@ Postgres constraint, row lock, RLS와 transaction function은 의도적인 결�
 | `profiles` | `user_id`, `profile_name`, timestamps; Auth 삭제와 분리된 공개 프로필 |
 | `admin_roles` | 명시적으로 부여된 관리자만 존재 |
 | `books` | 제목·저자·출판사·출간연도·장르·판본·번역자·ISBN·표지 등 책/판본 식별 정보 |
-| `book_context_pack_versions` | `book_id`, version, `DRAFT/REVIEW/PUBLISHED/RETIRED`, schema version, checksum, 생성·게시·Retire metadata |
+| `book_context_pack_versions` | `book_id`, version, `DRAFT/REVIEW/PUBLISHED/RETIRED`, schema version, checksum, Pack-level 검수 revision·생성·게시·Retire metadata |
 | `book_context_sections` | Pack version별 7개 section, coverage와 review 상태 |
 | `book_context_items` | stable item id, section, `FACT/AUTHOR_STATEMENT/INTERPRETATION/DISCUSSION_SIGNAL`, 내용·위치·evidence state |
 | `book_context_item_links` | theme·entity·issue 등 item 사이의 typed relation |
 | `book_context_sources` | Tier A~E, URL/서지 locator, 제목, 발행 주체, 조사 시각과 권리 metadata |
 | `book_context_item_sources` | item-source의 `SUPPORTS/CONTRADICTS/CONTEXT_ONLY` 관계와 근거 위치 |
+| `private.book_catalog_external_identifiers` | Provider 외부 ID·ISBN과 정규화 selection snapshot; 동일 판본 중복 방지 |
 | `private.book_builder_runs/artifacts` | durable stage, 시도·오류·현재 Draft와 live consumer에서 격리된 중간 산출물 |
 | `book_context_admin_audit` | 운영자 actor, action, target, 시각, 변경 metadata와 사유 |
 
@@ -623,6 +624,8 @@ document/patch schema, commit algorithm, degraded mode와 필수 eval은 `docs/A
 
 ### 9.7 Book Context Builder
 
+Admin은 제목·저자·ISBN으로 서버의 `BookCatalogSearchProvider`를 호출하고 Kakao 결과에서 판본을 선택한다. 서버는 정규화한 selection을 짧은 수명의 HMAC token으로 서명하며 create command는 이 token만 검증한다. `provider + externalBookId`와 ISBN-13 mapping은 private table에 보존해 같은 판본의 Pack 생성을 중복 처리한다.
+
 Builder는 하나의 긴 작업이 아니라 다음 작은 durable stage로 나눈다.
 
 1. 책 식별과 후보 자료 수집
@@ -631,7 +634,7 @@ Builder는 하나의 긴 작업이 아니라 다음 작은 durable stage로 나�
 4. Pack section 생성
 5. 자동 validation 후 Draft 보존
 
-Builder는 자동 Publish하지 않는다. 운영자가 항목의 성격, 출처 Tier, 근거, 정보 부족·충돌과 7개 section coverage를 Review한 뒤 명시적으로 Publish한다. 재실행은 기존 운영자 수정을 덮어쓰지 않고 새 Draft revision을 만든다. Full-text book ingestion과 embedding index는 만들지 않는다.
+Builder는 자동 Publish하지 않는다. Tier, evidence와 section coverage는 내부 검증에 유지하되 운영자 기본 UI는 7개 section을 연속 표시하고 기술 등급 대신 `수정 필요`, `확인 필요`, `근거 부족` 등으로 설명한다. 운영자는 내용을 수정·삭제한 뒤 Pack 단위로 전체 검수를 완료하고, 별도 command로 명시적으로 Publish한다. 재실행은 기존 운영자 수정을 덮어쓰지 않고 새 Draft revision을 만든다. Full-text book ingestion과 embedding index는 만들지 않는다.
 
 Pack content model, Provider, evidence state, Publish Gate와 Slice 2A/7 경계는 `docs/BOOK_CONTEXT_SPEC.md`를 따른다.
 

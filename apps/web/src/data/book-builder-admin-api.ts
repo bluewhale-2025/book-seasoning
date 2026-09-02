@@ -1,8 +1,10 @@
 import {
   AdminBookContextPackListResponseSchema,
   AdminBookContextPackSnapshotSchema,
+  AdminBookSearchResponseSchema,
   AdminPackCommandResponseSchema,
   BuilderPackCommandRequestSchema,
+  CompleteBookContextReviewRequestSchema,
   CreateBookContextPackRequestSchema,
   CreateBookContextPackResponseSchema,
   ProposalCommandRequestSchema,
@@ -15,8 +17,10 @@ import {
   UpdateBookContextDraftRequestSchema,
   type AdminBookContextPackListResponse,
   type AdminBookContextPackSnapshot,
+  type AdminBookSearchResponse,
   type AdminPackCommandResponse,
   type BuilderPackCommandRequest,
+  type CompleteBookContextReviewRequest,
   type CreateBookContextPackRequest,
   type CreateBookContextPackResponse,
   type ProposalCommandRequest,
@@ -32,11 +36,12 @@ import {
 import type { AuthenticatedHttpClient } from "./http-client";
 
 export type BookBuilderAdminApi = Readonly<{
+  searchBooks(query: string, page?: number): Promise<AdminBookSearchResponse>;
   listPacks(): Promise<AdminBookContextPackListResponse>;
   createPack(request: CreateBookContextPackRequest): Promise<CreateBookContextPackResponse>;
   getPack(packVersionId: string): Promise<AdminBookContextPackSnapshot>;
   updateDraft(packVersionId: string, request: UpdateBookContextDraftRequest): Promise<AdminPackCommandResponse>;
-  requestReview(packVersionId: string, request: BuilderPackCommandRequest): Promise<AdminPackCommandResponse>;
+  requestReview(packVersionId: string, request: CompleteBookContextReviewRequest): Promise<AdminPackCommandResponse>;
   returnToDraft(packVersionId: string, request: BuilderPackCommandRequest): Promise<AdminPackCommandResponse>;
   publish(packVersionId: string, request: PublishBookContextPackRequest): Promise<AdminPackCommandResponse>;
   retire(packVersionId: string, request: RetireBookContextPackRequest): Promise<AdminPackCommandResponse>;
@@ -48,6 +53,15 @@ export type BookBuilderAdminApi = Readonly<{
 
 export class HttpBookBuilderAdminApi implements BookBuilderAdminApi {
   public constructor(private readonly http: AuthenticatedHttpClient) {}
+
+  public searchBooks(query: string, page = 1) {
+    const parameters = new URLSearchParams({ q: query, page: String(page) });
+    return this.http.request(
+      `/v1/admin/book-context/books/search?${parameters.toString()}`,
+      { method: "GET" },
+      AdminBookSearchResponseSchema,
+    );
+  }
 
   public listPacks() {
     return this.http.request("/v1/admin/book-context/packs", { method: "GET" }, AdminBookContextPackListResponseSchema);
@@ -68,8 +82,8 @@ export class HttpBookBuilderAdminApi implements BookBuilderAdminApi {
     return this.command(`${this.packPath(packVersionId)}/draft`, "PUT", UpdateBookContextDraftRequestSchema.parse(request));
   }
 
-  public requestReview(packVersionId: string, request: BuilderPackCommandRequest) {
-    return this.command(`${this.packPath(packVersionId)}/review`, "POST", BuilderPackCommandRequestSchema.parse(request));
+  public requestReview(packVersionId: string, request: CompleteBookContextReviewRequest) {
+    return this.command(`${this.packPath(packVersionId)}/review`, "POST", CompleteBookContextReviewRequestSchema.parse(request));
   }
 
   public returnToDraft(packVersionId: string, request: BuilderPackCommandRequest) {

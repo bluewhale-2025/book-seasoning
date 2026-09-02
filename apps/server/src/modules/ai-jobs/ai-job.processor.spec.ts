@@ -219,18 +219,20 @@ describe("AiJobProcessor", () => {
     expect(queue.retryCalls).toHaveLength(0);
   });
 
-  it("turns the last failed attempt into ATTEMPTS_EXHAUSTED", async () => {
+  it("preserves the root code when the last attempt fails", async () => {
     const lastAttempt = { ...claimedJob, attemptNo: 3, maxAttempts: 3 };
     const queue = new FakeAiJobQueue(true, [lastAttempt]);
     const subject = processor(
       queue,
-      new FakeAiJobHandler(() => Promise.reject(new Error("provider details"))),
+      new FakeAiJobHandler(() =>
+        Promise.reject(new RetryableAiJobError("OUTPUT_CONTRACT_INVALID")),
+      ),
     );
 
     await subject.processNextBatch(0);
     expect(queue.completeCalls[0]).toMatchObject({
       outcome: "TERMINAL_FAILURE",
-      resultCode: "ATTEMPTS_EXHAUSTED",
+      resultCode: "OUTPUT_CONTRACT_INVALID",
     });
     expect(queue.retryCalls).toHaveLength(0);
   });

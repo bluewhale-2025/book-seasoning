@@ -2,7 +2,7 @@ begin;
 
 set local search_path = public, extensions;
 
-select plan(54);
+select plan(55);
 
 select ok(
   exists (select 1 from pg_extension where extname = 'pgmq'),
@@ -27,6 +27,18 @@ select has_table('private', 'living_wiki_versions', 'Living Wiki version table e
 select has_table('private', 'ai_evaluations', 'AI evaluation table exists');
 select has_table('private', 'ai_policy_actions', 'AI Policy action table exists');
 select has_table('private', 'ai_interventions', 'AI intervention table exists');
+
+select ok(
+  exists (
+    select 1
+    from pg_catalog.pg_constraint as constraint_row
+    where constraint_row.conrelid = 'private.ai_job_runs'::regclass
+      and constraint_row.contype = 'u'
+      and pg_catalog.pg_get_constraintdef(constraint_row.oid)
+        = 'UNIQUE (queue_name, queue_message_id)'
+  ),
+  'AI queue delivery identity is scoped by queue name'
+);
 
 select ok(
   exists (

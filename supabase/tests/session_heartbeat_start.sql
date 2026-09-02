@@ -197,7 +197,7 @@ select throws_ok(
       '80300000-0000-4000-8000-000000000001', 99
     )
   $$,
-  '40001',
+  'P0001',
   'phase_version_conflict',
   'start rejects a stale phase version'
 );
@@ -387,7 +387,7 @@ select throws_ok(
       '80300000-0000-4000-8000-000000000001', 0
     )
   $$,
-  '40001',
+  'P0001',
   'command_payload_mismatch',
   'a start command id cannot be reused with another fingerprint'
 );

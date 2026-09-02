@@ -392,7 +392,7 @@ AI 평가와 결과, Builder, 보관 만료는 재시도와 중복 방지가 필
 
 ### Implementation status
 
-2026-09-02 S5-9에서 시작·message·연장 window trigger를 상태 transaction/DB trigger에, 침묵·의제 시간 후보를 10초 Cron reconciler에 연결했다. Cron은 candidate enqueue만 하고 provider는 Nest worker가 호출한다. trigger와 방장 도움 reason은 message/prep 원문이 없는 private directive로 저장하며 stable job key, active-job gate, attempt fencing과 최대 3회 stale refresh로 공개 효과를 한 번만 확정한다. 초기 queue lease는 60초이고 worker가 20초마다 DB lease와 PGMQ visibility를 함께 연장한다. 실제 Evaluator와 Host가 한 job에서 연속 호출되는 흐름 및 transient provider retry에서도 동일 attempt 소유권이 유지됨을 live E2E로 확인했다.
+2026-09-02 S5-9에서 시작·message·연장 window trigger를 상태 transaction/DB trigger에, 침묵·의제 시간 후보를 10초 Cron reconciler에 연결했다. Cron은 candidate enqueue만 하고 provider는 Nest worker가 호출한다. trigger와 방장 도움 reason은 message/prep 원문이 없는 private directive로 저장하며 stable job key, active-job gate, attempt fencing과 최대 3회 stale refresh로 공개 효과를 한 번만 확정한다. 초기 queue lease는 60초이고 worker가 20초마다 DB lease와 PGMQ visibility를 함께 연장한다. 실제 Evaluator와 Host가 한 job에서 연속 호출되는 흐름 및 transient provider retry에서도 동일 attempt 소유권이 유지됨을 live E2E로 확인했다. 2026-09-03에는 PGMQ `msg_id`가 queue별 sequence라는 점을 반영해 AI job의 delivery identity를 `(queue_name, queue_message_id)` 복합 unique로 교정했다. 따라서 `ai-session`과 `ai-record`가 같은 숫자의 message id를 발급해도 서로 충돌하지 않는다.
 
 ### Trade-offs
 
@@ -465,7 +465,7 @@ Evaluator, Host, Living Wiki, 결과는 서로 다른 책임과 검증 규칙을
 
 ### Implementation status
 
-2026-09-02 S5-8에서 `AiGateway`/task catalog와 OpenAI Responses adapter를 구현했다. OpenAI SDK import와 client 생성은 infrastructure에만 두고, Evaluator/Checkpoint와 Opening/Host alias를 분리했다. provider 실행 진단에는 콘텐츠 없이 실제 model·prompt/schema version·reasoning·latency·usage 또는 안정된 failure code만 남긴다. Opening 고정 fallback과 Host schema/privacy/freshness 검증 뒤 worker-only atomic commit까지 연결했다. Luna Evaluator와 Terra Opening/Host의 live 고정 eval 및 합성 Opening worker→DB idempotency smoke를 통과했다. 2026-09-02 S5-9에서는 첫 Wiki patch의 완전성과 중복 projection 일치를 명시한 `public-evaluator.v2`를 적용했다. 검증된 top-level metrics/topic/관점/책 근거/참여 값을 같은 stable id의 patch operation에 결정적으로 정규화하지만 누락 operation, relation/reference 오류나 새로운 의미를 보충하지는 않는다. provider timeout·connection 실패를 별도 content-free code로 분류하고 SDK `maxRetries: 0`을 유지해 durable Queue만 bounded retry를 소유한다. 실제 host-help Queue E2E는 transient provider 실패 뒤 두 번째 attempt에 성공했다.
+2026-09-02 S5-8에서 `AiGateway`/task catalog와 OpenAI Responses adapter를 구현했다. OpenAI SDK import와 client 생성은 infrastructure에만 두고, Evaluator/Checkpoint와 Opening/Host alias를 분리했다. provider 실행 진단에는 콘텐츠 없이 실제 model·prompt/schema version·reasoning·latency·usage 또는 안정된 failure code만 남긴다. Opening 고정 fallback과 Host schema/privacy/freshness 검증 뒤 worker-only atomic commit까지 연결했다. Luna Evaluator와 Terra Opening/Host의 live 고정 eval 및 합성 Opening worker→DB idempotency smoke를 통과했다. 2026-09-02 S5-9에서는 첫 Wiki patch의 완전성과 중복 projection 일치를 명시한 `public-evaluator.v2`를 적용했다. 2026-09-03 `public-evaluator.v4`에서는 exact allowed evidence catalog와 required envelope를 provider 입력에 추가하고 metric별 level/reason-code 조합을 JSON Schema로 제한했다. 공개 message seq·Book item id로 모델이 선택한 opaque evidence ID는 같은 context의 실제 UUID로 정규화하고, 중복 reference와 존재하지 않는 Wiki entity를 향한 dangling relation·coverage edge만 제거한다. 누락된 canonical projection operation은 검증된 top-level 평가에서 서버가 조립하되 새로운 관점·근거·문장은 만들지 않는다. 알 수 없는 evidence locator는 기존 resolver·Pack·cursor 검증으로 거절한다. provider timeout·connection·schema 실패는 content-free code로 분류하고 SDK `maxRetries: 0`을 유지해 durable Queue만 bounded retry를 소유하며, 최종 실패에도 `ATTEMPTS_EXHAUSTED` 대신 마지막 원인 코드를 보존한다. 실제 host-help Queue E2E는 transient provider 실패 뒤 두 번째 attempt에 성공했다.
 
 ### Consequences
 
@@ -3418,6 +3418,154 @@ Supabase가 제공하는 검증 경계를 그대로 사용하면 별도 인증 �
 - 정상 사용자의 인증 실패나 추가 상호작용 비율이 제품 사용성을 유의미하게 해칠 때
 - Supabase가 인증 endpoint별 CAPTCHA 설정을 제공할 때
 - 자체 Auth proxy 또는 edge WAF를 도입해 선택 적용이 더 단순해질 때
+
+## [PRODUCT-033] 외부 도서 선택과 Pack 단위 전체 검수
+
+- Date: 2026-09-03
+- Status: ACCEPTED
+- Owner: Product owner
+- Related:
+  - `PRODUCT_SPEC.md` §19
+  - `docs/BOOK_CONTEXT_SPEC.md`
+  - `docs/BOOK_CONTEXT_BUILDER_UX.md`
+
+### Context
+
+운영자가 제목과 저자를 직접 입력하면 동명 도서와 번역·출판 판본을 잘못 등록할 수 있다. 기존 UI는 item과 section마다 검수 상태를 바꾸고 Tier A~E 규칙을 이해하도록 요구해, 실제 업무인 전체 내용 읽기·수정·삭제보다 상태 관리가 앞섰다.
+
+### Decision
+
+- 운영자는 제목, 저자 또는 ISBN으로 외부 도서 카탈로그를 검색하고 표지·번역자·출판사·출간일·ISBN을 확인해 정확한 판본을 선택한다.
+- MVP는 검색 결과가 없을 때 수동 등록을 제공하지 않는다.
+- 동일 ISBN 또는 동일 Provider 외부 ID의 기존 Pack은 중복 생성하지 않고 기존 Pack으로 이동한다.
+- 운영자는 7개 section을 연속해서 읽고 내용을 수정·삭제하며 item·section별 검수 상태를 직접 지정하지 않는다.
+- 자동 검사 결과는 `수정 필요`와 `확인 필요`로 구분하고 `근거 부족`, `검수 필요`, `출처 확인 불가` 등 직관적인 문구로 표시한다.
+- Tier A~E와 evidence 검증은 내부 품질 규칙으로 유지하되 기본 운영자 화면에서 숨긴다.
+- `수정 필요`가 없고 `확인 필요`를 Pack 단위로 한 번 확인하면 `전체 검수 완료`할 수 있다. 검수 완료와 Publish는 별도 결정으로 유지한다.
+
+### Rationale
+
+외부 판본 선택은 생성 입력의 정확도를 높이고 중복을 줄인다. 검수 단위를 Pack 전체로 맞추면 운영자가 기술 분류를 학습하거나 의미 없는 체크를 반복하지 않고 실제 내용 품질에 집중할 수 있다.
+
+### Consequences
+
+- 검색 Provider 장애 시 Pack 생성은 닫힌 상태로 실패하며 빈 책을 만들지 않는다.
+- Pack-level 검수자·시각·revision과 확인한 warning 목록을 감사한다.
+- 검수 완료 뒤 수정하려면 Draft로 돌아가 새 revision을 다시 검수한다.
+- 일반 사용자 카탈로그와 Published exact-version pin 규칙은 바뀌지 않는다.
+
+### Revisit Trigger
+
+- 카카오 검색 누락률 때문에 운영 가능한 도서 범위를 반복해서 충족하지 못할 때
+- 운영자가 검색되지 않는 책을 준비해야 해 승인된 수동 등록 흐름이 필요할 때
+- 편집자와 검수자 역할 분리가 필요해질 때
+
+## [PRODUCT-034] 빈 Pack 항목 저장 제외와 부분 입력 보류
+
+- Date: 2026-09-03
+- Status: ACCEPTED
+- Owner: Product owner
+- Related:
+  - `PRODUCT_SPEC.md` §19.4
+  - `docs/BOOK_CONTEXT_BUILDER_UX.md` §5.3
+
+### Context
+
+운영자가 실수로 `항목 추가`를 누른 뒤 내용을 작성하지 않아도 기본 안내 문구가 실제 Pack item처럼 자동 저장되고 있었다. 완전히 빈 항목과 작성 중인 항목을 구분하지 않으면 의미 없는 데이터가 남거나 입력 중인 내용을 조용히 버릴 수 있다.
+
+### Decision
+
+- 새 item의 제목과 내용은 빈 입력으로 시작하고 두 필드를 필수로 표시한다.
+- 제목과 내용이 모두 비어 있고 위치·근거·관계도 없는 item은 저장 payload에서 제외한다.
+- 제목 또는 내용 중 일부를 작성한 item은 두 필드가 모두 완성될 때까지 자동 저장과 전체 검수 완료를 보류한다.
+- 두 필드가 완성되면 기존 Draft 자동 저장 흐름으로 저장한다.
+
+### Rationale
+
+완전히 빈 항목은 운영자의 실수로 보고 무시하되, 작성 중인 항목은 명시적인 필수값 안내를 통해 데이터 유실 없이 완성하도록 한다.
+
+### Consequences
+
+- 안내용 placeholder는 Pack 데이터로 저장되지 않는다.
+- 미완성 item이 있으면 화면에 저장 보류 상태가 표시된다.
+- API의 기존 strict Draft contract는 유지되어 빈 제목이나 내용이 서버 데이터에 들어가지 않는다.
+
+### Revisit Trigger
+
+- inline 자동 저장보다 별도 item 생성 dialog가 운영 효율에 더 적합하다고 확인될 때
+- 임시 작성 상태를 기기 간 유지해야 할 요구가 생길 때
+
+## [TECH-029] Kakao 도서 검색 Provider와 서명된 선택 증명값
+
+- Date: 2026-09-03
+- Status: ACCEPTED
+- Owner: Engineering
+- Related:
+  - `PRODUCT-033`
+  - `docs/API_REFERENCE.md` §7
+
+### Context
+
+외부 검색 응답의 제목·저자·ISBN을 클라이언트가 임의로 바꿔 Pack 생성 요청에 넣지 못하게 하면서, Provider별 응답 형태와 Pack domain을 분리해야 한다. Amazon 상품 API는 MVP의 단순 도서 검색에 비해 제휴 자격과 운영 전제가 크다.
+
+### Decision
+
+- 서버 전용 `BookCatalogSearchProvider` 경계를 두고 MVP 구현은 Kakao 책 검색 API를 사용한다.
+- 서버가 Kakao 응답을 공통 selection contract로 정규화하고 10분 만료 HMAC `selectionProof`로 서명한다.
+- Pack 생성 command는 제목·저자 대신 `selectionProof`만 받고 서명과 만료를 검증한다.
+- `provider + externalBookId`와 ISBN-13 mapping을 별도 private table에 저장해 중복 판본을 식별한다.
+- 카카오 credential과 원본 응답은 브라우저나 공개 catalog contract에 노출하지 않는다.
+
+### Rationale
+
+짧은 수명의 서명 토큰은 생성 시 외부 API를 다시 호출하지 않아도 사용자가 실제 검색한 정규화 결과를 신뢰할 수 있게 한다. Provider boundary와 별도 식별 mapping은 후속 Provider 추가 시 Pack schema를 Kakao에 결합하지 않는다.
+
+### Consequences
+
+- API runtime에 `KAKAO_REST_API_KEY`가 필요하다.
+- 검색 제한과 Provider 장애는 `429/503`으로 명시하고 Pack을 생성하지 않는다.
+- 후속 Provider 추가 시 공통 contract, dedupe 우선순위와 cross-provider identity 규칙을 함께 확장해야 한다.
+
+### Revisit Trigger
+
+- 카카오 검색 품질·쿼터·약관이 MVP 운영 요구를 충족하지 못할 때
+- Google Books나 Naver를 fallback으로 추가할 때
+- 외부 선택 증명값 대신 서버 저장형 selection session이 필요한 보안·감사 요구가 생길 때
+
+## [TECH-030] 업무 충돌과 transaction serialization failure의 SQLSTATE 분리
+
+- Date: 2026-09-03
+- Status: ACCEPTED
+- Owner: Engineering
+- Related:
+  - `TECH-027`
+  - `docs/BOOK_CONTEXT_BUILDER_UX.md` §5.1
+
+### Context
+
+optimistic revision 충돌과 command payload 불일치에 PostgreSQL `40001`을 사용했다. `40001`은 실제 transaction serialization failure를 뜻하며 PostgREST가 자동 재시도하는 대상이어서, 한 번의 Pack 검수 충돌이 같은 RPC의 대량 반복 실행과 오류 로그 폭주로 확대될 수 있다.
+
+### Decision
+
+- 애플리케이션이 의도적으로 발생시키는 revision, aggregate version, idempotency payload와 room 상태 충돌은 non-retryable `P0001`과 안정적인 domain message를 사용한다.
+- `40001`은 데이터베이스가 실제 transaction serialization failure로 발생시킨 경우에만 허용한다.
+- Builder 실행 중에는 Pack 입력과 lifecycle action을 잠가 생성 revision과 운영자 저장이 경쟁하지 않게 한다.
+- stale revision 자동 저장은 반복하지 않는다. 로컬 입력을 유지하고 최신본을 명시적으로 다시 불러오게 한다.
+
+### Rationale
+
+재시도 가능 여부를 SQLSTATE의 표준 의미와 일치시키면 API gateway의 숨은 자동 재시도를 막을 수 있다. UI의 실행 중 잠금과 충돌 후 정지는 정상적인 optimistic concurrency 경계도 보존한다.
+
+### Consequences
+
+- 기존 public/private 함수는 forward migration에서 `40001`의 의도적 raise를 `P0001`로 교체한다.
+- 서버의 기존 stable message 기반 오류 mapping과 HTTP `409` contract는 유지된다.
+- 실제 serialization failure는 인프라·worker 경계에서만 bounded retry 대상으로 취급한다.
+
+### Revisit Trigger
+
+- PostgREST upgrade 후 SQLSTATE별 retry 정책을 애플리케이션이 명시적으로 제어할 수 있게 될 때
+- domain별 custom SQLSTATE 체계가 운영 관측과 client contract에 실질적인 이점을 줄 때
 
 # Experiment Values
 

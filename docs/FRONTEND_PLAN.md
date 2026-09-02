@@ -119,7 +119,7 @@ Admin Builder는 `docs/BOOK_CONTEXT_SPEC.md`의 7개 section을 기준으로 다
 
 - 책·판본 identity와 section별 Coverage
 - 항목의 `FACT/AUTHOR_STATEMENT/INTERPRETATION/DISCUSSION_SIGNAL`
-- 출처 Tier, 근거 locator와 supports/conflicts 관계
+- 출처명·발행 주체·근거 locator와 supports/conflicts 관계. Tier는 내부 판정에만 사용하고 기본 UI에는 노출하지 않음
 - 정보 부족과 출처 충돌
 - 자동 생성본과 운영자 수정본, 재생성 diff
 - Builder stage 진행률·실패·재시도
@@ -293,7 +293,7 @@ Slice 3 프론트 범위와 Slice 4의 session timer·운영 control도 완료�
 
 Slice 6 구현 상태(2026-09-02): Closing에서는 일반 composer를 닫고 실제 참여자 본인의 마지막 한 줄만 작성·수정·삭제·건너뛰기 할 수 있게 했다. 진행 중에는 완료 인원수와 현재 사용자의 응답만 표시하고 다른 참가자의 원문은 렌더링하지 않는다. 종료 후 기본 화면은 익명화된 `오늘의 토론 기록`이며 `PENDING/PROCESSING/RETRYING/READY/FAILED/INSUFFICIENT`를 독립적으로 처리한다. 방장에게만 허용된 실패 재시도, 실제 참여자 dialog, 읽기 전용 전체 대화, PUBLIC prep과 작성자 본인의 AI_PRIVATE를 분리한 `내 준비`, 제출된 마지막 한 줄을 제공한다. 종료 후 prep 조회가 제품 명세와 달리 Scheduled에만 잠겨 있던 DB 권한을 실제 참여자/방장 읽기까지 확장했고, 다른 사용자의 AI_PRIVATE 비노출 pgTAP과 DOM 회귀를 추가했다. 360px 가로 넘침과 axe 자동 검사를 통과했다.
 
-Slice 7 구현 상태(2026-09-02): 본인의 `ProfileSchema.role`로만 표시되는 Admin 진입점과 별도 route guard, 전체 Admin HTTP adapter를 추가했다. Pack 목록·생성에서 7단계 Builder 진행과 실패 재시도, 7개 섹션·항목·출처·근거 관계 편집, revision 기반 직렬 자동 저장, 전체·항목 재생성 proposal의 현재/제안 비교와 적용·폐기, Draft → Review → Publish → Retire 흐름을 연결했다. hard blocker는 발행 action을 숨기고 warning은 정확한 code 목록을 모두 확인해야 발행할 수 있다. 일반 사용자는 Admin route에서 `/discussions`로 복귀하며 account role은 토론 참가자 payload에 노출하지 않는다. 360px 가로 넘침, 섹션 전환, axe WCAG A/AA 자동 검사를 통과했다. 다만 현재 create contract는 동일 책의 새 버전도 빈 Draft와 INITIAL run으로 시작하므로, Published 내용을 복제하는 별도 새 버전 command는 서버 contract 보강 대상으로 남아 있다.
+Slice 7 구현 상태(2026-09-03): 본인의 `ProfileSchema.role`로만 표시되는 Admin 진입점과 별도 route guard, 전체 Admin HTTP adapter를 추가했다. 새 Pack은 Kakao 도서 검색에서 정확한 판본을 선택하고 서명 `selectionProof`로 생성하며 같은 Provider ID/ISBN의 기존 Pack은 중복 생성하지 않는다. 상세 화면은 7개 섹션과 출처를 연속 표시하고 item·section별 검수 control과 Tier 문자를 숨긴다. 운영자는 내용을 수정·삭제하고 `수정 필요`를 해결한 뒤 `확인 필요`를 한 번 확인해 Pack 전체 검수를 완료하며, Publish는 별도 확인으로 실행한다. 7단계 Builder 진행·실패 재시도, revision 기반 직렬 자동 저장, 전체·항목 재생성 proposal의 현재/제안 비교와 적용·폐기, 작성 중 → 검수 완료 → 게시됨 → 게시 중단 흐름을 연결했다. 일반 사용자는 Admin route에서 `/discussions`로 복귀하며 account role은 토론 참가자 payload에 노출하지 않는다. Published 내용을 복제하는 별도 새 버전 command는 서버 contract 보강 대상으로 남아 있다.
 
 Slice 8 프론트 구현 상태(2026-09-02): 프로필 설정에서 탈퇴 preview를 매번 새로 조회하고, `ADMIN_ROLE`·`ACTIVE_PARTICIPATION`·`HOSTED_ROOM_REQUIRES_TRANSFER_OR_CANCEL` blocker가 있으면 비밀번호 form을 만들지 않은 채 해결 경로만 안내한다. 허용된 계정에는 유지·익명화되는 공동 기록과 영구 삭제되는 AI_PRIVATE 수를 분리해 보여주고, 현재 비밀번호와 명시적 영구 동의가 모두 있어야 삭제 command를 보낸다. 비밀번호는 TanStack mutation cache에 넣지 않으며 실패 즉시 input에서 제거한다. `CURRENT_PASSWORD_INVALID`와 `ACCOUNT_DELETION_PENDING`은 전역 logout으로 처리하지 않고, `COMPLETED` 뒤에는 Auth sign-out 실패와 관계없이 모든 local Query cache와 인증 상태를 폐기한다. 완료 후 로그인 화면은 탈퇴 완료를 확인해 준다. route render 실패에는 원문·credential을 표시하지 않는 전역 복구 화면을 추가했다. 360px dialog reflow와 axe WCAG A/AA 자동 검사를 통과했다. 프론트의 실제 adapter를 사용한 local Auth hard-delete smoke에서 가입·프로필 parse·preview·비밀번호 오류·삭제·재로그인 차단·같은 email의 새 UUID 재가입과 임시 계정 정리까지 통과했다. DB prepare 직후 Auth 삭제가 중단된 상태도 실제 local lease로 재현했고, Worker recovery 경로의 재claim·Auth hard-delete·완료 기록·새 UUID 재가입까지 통과했다.
 

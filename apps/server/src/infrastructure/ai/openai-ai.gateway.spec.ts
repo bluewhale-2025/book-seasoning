@@ -114,6 +114,31 @@ describe("OpenAiGateway", () => {
     );
   });
 
+  it("classifies provider output that fails its task schema", async () => {
+    const client = {
+      responses: {
+        parse: () =>
+          Promise.resolve({
+            id: "resp_invalid",
+            output_parsed: {
+              ...OpeningOutputV1Fixture,
+              message: "",
+            },
+            usage: null,
+          }),
+      },
+    } as unknown as OpenAiClient;
+    const subject = new OpenAiGateway(environment, client);
+
+    await expect(subject.generate(openingTask, input)).rejects.toEqual(
+      expect.objectContaining({
+        name: "AiGatewayInvocationError",
+        code: "AI_PROVIDER_OUTPUT_INVALID",
+        retryable: true,
+      } satisfies Partial<AiGatewayInvocationError>),
+    );
+  });
+
   it("does not retry an incomplete response that exhausted its output budget", async () => {
     const client = {
       responses: {

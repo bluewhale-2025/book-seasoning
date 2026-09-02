@@ -157,6 +157,96 @@ describe("LivingWikiCommitService", () => {
     });
   });
 
+  it("drops dangling generated Wiki links without weakening evidence validation", async () => {
+    const { subject, repository } = createSubject();
+    const danglingPerspectiveId = "b8000000-0000-4000-8000-000000000099";
+    const firstPerspective = PublicEvaluatorOutputV1Fixture.majorPerspectives[0]!;
+    const malformedPerspective = {
+      ...firstPerspective,
+      relations: [
+        {
+          ...firstPerspective.relations[0]!,
+          targetPerspectiveId: danglingPerspectiveId,
+        },
+      ],
+    };
+    const malformedOutput = {
+      ...PublicEvaluatorOutputV1Fixture,
+      majorPerspectives: [
+        malformedPerspective,
+        ...PublicEvaluatorOutputV1Fixture.majorPerspectives.slice(1),
+      ],
+      wikiPatch: {
+        ...PublicEvaluatorOutputV1Fixture.wikiPatch,
+        operations: PublicEvaluatorOutputV1Fixture.wikiPatch.operations.map(
+          (operation) =>
+            operation.operation === "UPSERT_PERSPECTIVE" &&
+            operation.perspective.perspectiveId ===
+              malformedPerspective.perspectiveId
+              ? { ...operation, perspective: malformedPerspective }
+              : operation,
+        ),
+      },
+    };
+
+    await subject.commitPatch({ ...input, evaluatorOutput: malformedOutput });
+
+    expect(repository.calls[0]?.document.perspectiveMap[0]?.relations).toEqual(
+      [],
+    );
+    expect(
+      repository.calls[0]?.evaluatorOutput.majorPerspectives[0]?.relations,
+    ).toEqual([]);
+  });
+
+  it("builds missing projection operations from validated evaluator state", async () => {
+    const { subject, repository } = createSubject();
+    const secondParticipant = {
+      participantId: "b8000000-0000-4000-8000-000000000098",
+      attendance: "PRESENT" as const,
+      recentActivity: "ACTIVE" as const,
+      publiclyExpressedPosition: null,
+      evidenceRefs: [],
+    };
+    const evaluatorOutput = {
+      ...PublicEvaluatorOutputV1Fixture,
+      participation: [
+        ...PublicEvaluatorOutputV1Fixture.participation,
+        secondParticipant,
+      ],
+      wikiPatch: {
+        ...PublicEvaluatorOutputV1Fixture.wikiPatch,
+        operations: PublicEvaluatorOutputV1Fixture.wikiPatch.operations.filter(
+          (operation) =>
+            operation.operation !== "SET_METRICS_AND_KEY_CHANGES" &&
+            operation.operation !== "UPSERT_PUBLIC_PARTICIPANT_STATE",
+        ),
+      },
+    };
+
+    await subject.commitPatch({ ...input, evaluatorOutput });
+
+    expect(repository.calls[0]?.document.participantState).toEqual(
+      evaluatorOutput.participation,
+    );
+    expect(repository.calls[0]?.document.metricsAndKeyChanges.metrics).toEqual(
+      evaluatorOutput.metrics,
+    );
+    expect(
+      repository.calls[0]?.evaluatorOutput.wikiPatch.operations,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "UPSERT_PUBLIC_PARTICIPANT_STATE",
+          participantState: secondParticipant,
+        }),
+        expect.objectContaining({
+          operation: "SET_METRICS_AND_KEY_CHANGES",
+        }),
+      ]),
+    );
+  });
+
   it("commits a topic checkpoint while retaining the previous topic coverage", async () => {
     const { subject, repository } = createSubject();
     const nextTopic = {

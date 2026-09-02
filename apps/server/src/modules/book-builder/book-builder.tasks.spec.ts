@@ -49,7 +49,7 @@ describe("book builder tasks", () => {
   it("bounds draft generation separately from research", () => {
     expect(bookBuilderDraftTask).toMatchObject({
       reasoningEffort: "low",
-      maxOutputTokens: 8_000,
+      maxOutputTokens: 12_000,
     });
   });
 });

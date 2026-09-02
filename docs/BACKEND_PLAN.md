@@ -161,7 +161,7 @@ Living Wiki 전체 document, AI_PRIVATE, evaluation/Policy 내부 로그, rate-l
 | Message | append와 inline reply target 확정 |
 | Closing | reflection 제출·수정·삭제·skip |
 | Result | 실패한 공식 결과의 방장 수동 재시도 |
-| Builder | Book/Pack Draft 생성, 항목·출처 편집/재생성, Review, Publish, Retire |
+| Builder | 외부 도서 검색·판본 선택, Book/Pack Draft 생성, 항목·출처 편집/재생성, Pack 단위 전체 검수, Publish, Retire |
 
 모든 중요 command는 Nest API를 통과하고 Postgres transaction에서 현재 actor, membership, phase/version, deadline와 idempotency를 다시 확인한다.
 
@@ -409,7 +409,7 @@ privacy, 무권한 접근, 공식 결과 불변성, 중복 확정과 탈퇴 후 
 
 ## 14. Vertical slice별 서버 산출물
 
-현재 구현 상태(2026-09-02): Slice 0~8의 MVP 서버 범위가 완료되었다. Slice 6은 Synthesis, 5분 Closing, 개인 reflection, Final Wiki와 불변 Discussion Record를 durable Queue에 연결했다. Slice 7은 Book Context의 7단계 Builder, web research, Draft/Review/Publish Gate, 재생성 proposal과 Admin API를 구현했다. Slice 8은 current-password 계정 탈퇴, AI_PRIVATE 삭제·공동 기여 익명화, Auth hard-delete recovery, 37일 restore tombstone, 90일 AI 진단 purge와 운영 배포·backup/restore 자산을 구현했다. API와 worker는 같은 container image에서 독립 command로 실행되고 API readiness와 worker heartbeat를 분리한다.
+현재 구현 상태(2026-09-03): Slice 0~8의 MVP 서버 범위가 완료되었다. Slice 6은 Synthesis, 5분 Closing, 개인 reflection, Final Wiki와 불변 Discussion Record를 durable Queue에 연결했다. Slice 7은 Kakao 도서 검색·서명 selection, 동일 판본 중복 방지, Book Context의 7단계 Builder, web research, Pack-level Review/Publish Gate, 재생성 proposal과 Admin API를 구현했다. Slice 8은 current-password 계정 탈퇴, AI_PRIVATE 삭제·공동 기여 익명화, Auth hard-delete recovery, 37일 restore tombstone, 90일 AI 진단 purge와 운영 배포·backup/restore 자산을 구현했다. API와 worker는 같은 container image에서 독립 command로 실행되고 API readiness와 worker heartbeat를 분리한다.
 
 Slice 6~8 검증(2026-09-02): `pnpm check`의 lint/typecheck/unit/build에서 code test 259개(contracts 45, domain 10, server 189, web 15)가 통과했고, local migration reset 뒤 24개 SQL file의 pgTAP 695개 assertion이 통과했다. 실제 model eval은 Evaluator·Opening·Host, Synthesis·Discussion Record와 Builder research·draft를 검증했다. Builder는 web research 7개 출처·22개 claim에서 7개 section·22개 item·28개 evidence link를 만들고 canonical 검증을 통과했다. Node 24.18 Docker image build와 API live/ready, worker SIGTERM graceful shutdown smoke도 통과했다. 원문은 eval 출력이나 진단 로그에 남기지 않았다.
 

@@ -17,7 +17,7 @@ describe("loadEnvironment", () => {
       corsOrigins: ["http://localhost:5173"],
       openAiEvaluatorModel: "gpt-5.6-luna",
       openAiHostModel: "gpt-5.6-terra",
-      openAiTimeoutMs: 20_000,
+      openAiTimeoutMs: 120_000,
     });
   });
 
@@ -57,10 +57,17 @@ describe("loadEnvironment", () => {
       expect.objectContaining({
         fields: expect.arrayContaining([
           "COMMAND_FINGERPRINT_KEY",
+          "KAKAO_REST_API_KEY",
           "SUPABASE_SECRET_KEY",
         ]),
       }),
     );
+  });
+
+  it("loads the server-only Kakao REST API key", () => {
+    expect(loadEnvironment("api", {
+      KAKAO_REST_API_KEY: "kakao-rest-api-key",
+    }).kakaoRestApiKey).toBe("kakao-rest-api-key");
   });
 
   it("requires a direct database URL for the production worker", () => {

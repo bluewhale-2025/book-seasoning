@@ -15,6 +15,7 @@ export function accountApiStub(overrides: Partial<AccountApi> = {}): AccountApi 
 
 export function bookBuilderAdminApiStub(overrides: Partial<BookBuilderAdminApi> = {}): BookBuilderAdminApi {
   return {
+    searchBooks: vi.fn(),
     listPacks: vi.fn(),
     createPack: vi.fn(),
     getPack: vi.fn(),

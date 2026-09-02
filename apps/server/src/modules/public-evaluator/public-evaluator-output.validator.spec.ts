@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AiEngineMessageEvidenceFixture,
+  AiEngineSecondMessageEvidenceFixture,
   AiPrivateEvaluatorLeakCanaryFixture,
   PublicEvaluatorOutputV1Fixture,
   type PublicEvidenceRef,
@@ -66,7 +67,7 @@ describe("PublicEvaluatorOutputValidator", () => {
     await expect(
       subject.validate(evaluatorJob, evaluatorContext, output),
     ).rejects.toMatchObject({
-      code: "PUBLIC_EVALUATOR_METRIC_REASON_INVALID",
+      code: "PUBLIC_EVALUATOR_OUTPUT_INVALID",
     });
   });
 
@@ -92,7 +93,93 @@ describe("PublicEvaluatorOutputValidator", () => {
     ).resolves.toMatchObject({ suggestedAction: "WAIT" });
   });
 
-  it("rejects evidence the Evaluator did not receive in its context", async () => {
+  it("normalizes mechanical provider duplication before semantic validation", async () => {
+    const subject = new PublicEvaluatorOutputValidator(
+      new FakeEvidenceResolver(),
+    );
+    const output = {
+      ...PublicEvaluatorOutputV1Fixture,
+      metrics: {
+        ...PublicEvaluatorOutputV1Fixture.metrics,
+        depth: {
+          ...PublicEvaluatorOutputV1Fixture.metrics.depth,
+          evidenceRefs: [
+            AiEngineMessageEvidenceFixture,
+            AiEngineMessageEvidenceFixture,
+          ],
+        },
+      },
+      currentTopic: {
+        ...PublicEvaluatorOutputV1Fixture.currentTopic!,
+        transitionedFromTopicId:
+          PublicEvaluatorOutputV1Fixture.currentTopic!.topicId,
+        changeSummary: "같은 논점을 다시 정리했다.",
+      },
+      wikiPatch: {
+        ...PublicEvaluatorOutputV1Fixture.wikiPatch,
+        baseVersion: 99,
+        basedThroughSeq: 99,
+        operations: PublicEvaluatorOutputV1Fixture.wikiPatch.operations.map(
+          (operation) => ({ ...operation, baseVersion: 99 }),
+        ),
+      },
+    };
+
+    await expect(
+      subject.validate(evaluatorJob, evaluatorContext, output),
+    ).resolves.toMatchObject({
+      metrics: {
+        depth: { evidenceRefs: [AiEngineMessageEvidenceFixture] },
+      },
+      currentTopic: {
+        transitionedFromTopicId: null,
+        changeSummary: null,
+      },
+      wikiPatch: {
+        baseVersion: evaluatorJob.baseWikiVersion,
+        basedThroughSeq: evaluatorJob.targetThroughSeq,
+      },
+    });
+  });
+
+  it("restores an opaque message id from the selected PUBLIC sequence", async () => {
+    const resolver = new FakeEvidenceResolver();
+    const subject = new PublicEvaluatorOutputValidator(resolver);
+    const output = {
+      ...PublicEvaluatorOutputV1Fixture,
+      currentTopic: {
+        ...PublicEvaluatorOutputV1Fixture.currentTopic,
+        evidenceRefs: [
+          {
+            type: "MESSAGE",
+            messageId: "b9000000-0000-4000-8000-000000000099",
+            seqNo: 4,
+          },
+        ],
+      },
+    };
+
+    await expect(
+      subject.validate(evaluatorJob, evaluatorContext, output),
+    ).resolves.toMatchObject({
+      currentTopic: {
+        evidenceRefs: [
+          {
+            type: "MESSAGE",
+            messageId: AiEngineSecondMessageEvidenceFixture.messageId,
+            seqNo: 4,
+          },
+        ],
+      },
+    });
+    expect(resolver.calls.flat()).toContainEqual({
+      type: "MESSAGE",
+      messageId: AiEngineSecondMessageEvidenceFixture.messageId,
+      seqNo: 4,
+    });
+  });
+
+  it("still rejects an evidence locator absent from PUBLIC context", async () => {
     const subject = new PublicEvaluatorOutputValidator(
       new FakeEvidenceResolver(),
     );
@@ -104,7 +191,7 @@ describe("PublicEvaluatorOutputValidator", () => {
           {
             type: "MESSAGE",
             messageId: "b9000000-0000-4000-8000-000000000099",
-            seqNo: 4,
+            seqNo: 2,
           },
         ],
       },

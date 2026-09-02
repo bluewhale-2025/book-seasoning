@@ -4,8 +4,8 @@
 > Product source of truth: `PRODUCT_SPEC.md` §18~§20  
 > Shared technical baseline: `docs/TECHNICAL_PLAN.md`  
 > Backend implementation: `docs/BACKEND_PLAN.md`  
-> Related decisions: `docs/DECISIONS.md` PRODUCT-025, PRODUCT-027, PRODUCT-028, TECH-024  
-> Last updated: 2026-09-02
+> Related decisions: `docs/DECISIONS.md` PRODUCT-025, PRODUCT-027, PRODUCT-028, PRODUCT-033, TECH-024, TECH-027, TECH-029
+> Last updated: 2026-09-03
 
 ## 0. 목적과 현재 구현 상태
 
@@ -21,7 +21,7 @@ Book Context Pack은 책 선택 카탈로그의 짧은 설명이 아니라 AI �
 - `BookContextDocumentV1` strict internal contract와 구조화 fixture
 - `BookContextProvider` application interface, item budget/filter와 Supabase adapter
 
-Slice 2A content/provider foundation과 Slice 7 Builder 서버 범위가 완료되었다. `20260902120000_book_context_builder.sql`, `apps/server/src/modules/book-builder`, `book-builder-admin`이 7단계 durable run, 공개 자료 web search, Draft/Review/Publish Gate, 새 version Publish/Retire, 전체·항목 재생성 proposal과 감사 workflow를 구현한다. 실제 서비스용 Pack은 Builder가 생성했더라도 운영자 검수와 Publish Gate를 명시적으로 통과해야 한다.
+Slice 2A content/provider foundation과 Slice 7 Builder 서버 범위가 완료되었다. `20260902120000_book_context_builder.sql`, `20260903010000_book_catalog_search_review.sql`, `apps/server/src/modules/book-builder`, `book-builder-admin`이 Kakao 도서 검색·판본 선택, 7단계 durable run, 공개 자료 web search, Pack 단위 전체 검수, Publish Gate, 새 version Publish/Retire, 전체·항목 재생성 proposal과 감사 workflow를 구현한다. 실제 서비스용 Pack은 Builder가 생성했더라도 운영자 검수 완료와 Publish Gate를 명시적으로 통과해야 한다.
 
 ## 1. 제품 불변조건
 
@@ -78,6 +78,16 @@ interface BookContextProvider {
 
 ISBN이나 판본 정보를 확인하지 못한 경우 빈 문자열로 위장하지 않고 명시적인 미확인 상태를 유지한다.
 
+### 3.1.1 운영자 도서 검색과 identity 선택
+
+- 운영자는 제목, 저자 또는 ISBN으로 외부 도서 카탈로그를 검색한다.
+- MVP 검색 Provider는 Kakao이며 외부 응답은 서버에서 공통 selection contract로 정규화한다.
+- 표지, 저자, 번역자, 출판사, 출간일과 ISBN을 보여 주어 정확한 판본을 선택하게 한다.
+- 검색 결과가 없으면 수동 등록하지 않고 다른 검색어나 ISBN 검색을 안내한다.
+- 생성 command는 서버가 발급한 10분 만료 서명 `selectionProof`만 받는다.
+- `provider + externalBookId`와 ISBN-13을 private identity mapping으로 보존하며 동일 판본의 기존 Pack을 중복 생성하지 않는다.
+- 외부 API 설명은 identity snapshot과 조사 질의 기준일 뿐 Pack의 검수 완료된 지식으로 간주하지 않는다.
+
 ### 3.2 7개 section
 
 | code | 내용 | 주 소비 목적 |
@@ -105,7 +115,7 @@ ISBN이나 판본 정보를 확인하지 못한 경우 빈 문자열로 위장�
 - 책 안의 위치가 확인되는 경우 장·부·페이지가 아닌 판본 독립적 locator 설명
 - 관련 theme/entity/issue item id
 - evidence state
-- 운영자 검수 상태와 마지막 수정자/시각
+- 내부 item 검수 상태와 마지막 수정자/시각. 이는 호환성과 감사용이며 운영자가 item마다 상태를 지정하는 UI는 제공하지 않는다.
 
 페이지 번호는 판본에 따라 달라질 수 있으므로 판본 정보와 분리된 절대 사실처럼 사용하지 않는다.
 
@@ -163,6 +173,7 @@ Tier A~E는 사용 목적을 나타낸다.
 | `book_context_item_sources` | item-source evidence 관계와 locator |
 | `private.book_builder_runs` | 단계, progress, attempt, 오류 class와 retry 상태 |
 | `private.book_builder_artifacts` | 자동 조사 단계의 중간 산출물 reference; live consumer 접근 금지 |
+| `private.book_catalog_external_identifiers` | Provider 외부 ID·ISBN과 생성 시점의 정규화 selection snapshot |
 | `book_context_admin_audit` | actor, 시각, 대상, action, before/after metadata와 사유 |
 
 Draft authoring은 normalized row를 사용하고 Provider가 canonical `BookContextDocumentV1`으로 조립한다. Published version의 item/source/section row는 update/delete를 금지한다. 필요하면 content checksum으로 Provider cache와 감사 일관성을 확인한다.
@@ -178,13 +189,18 @@ DRAFT → REVIEW → PUBLISHED → RETIRED
 ### Draft
 
 - 자동 저장과 운영자 편집 가능
+- 운영자 화면에는 `작성 중`으로 표시하며 Builder run 진행 중에는 `생성 중`으로 표시
+- 7개 section과 출처를 한 화면에서 연속해서 읽고 필요한 내용을 수정·삭제
+- 제목과 내용이 모두 빈 신규 item은 저장에서 제외하고, 일부만 작성한 item은 두 필수값이 완성될 때까지 저장을 보류
+- item·section별 검수 완료 control을 제공하지 않음
 - Builder 재실행은 기존 운영자 수정본을 바로 덮어쓰지 않음
 - 전체·항목별 재생성 결과를 반영하기 전 diff/영향 확인
 
 ### Review
 
 - 직접 수정 금지
-- validation과 운영자 검수 수행
+- 운영자가 현재 Pack revision 전체의 검수를 완료한 상태이며 화면에는 `검수 완료`로 표시
+- Pack-level `reviewedBy`, `reviewedAt`, `reviewedRevision`을 보존
 - 수정 필요 시 Draft로 되돌림
 
 ### Published
@@ -214,9 +230,9 @@ Builder는 하나의 긴 LLM 호출이 아니라 재시도 가능한 stage로 �
 
 실패 시 현재 Draft와 운영자 수정은 유지한다. 자동 retry가 성공해도 Review나 Published로 자동 전환하지 않는다. queue에는 원문 대신 run/stage/version id와 expected revision을 넣고, 긴 stage는 lease를 갱신한다.
 
-## 8. Publish Gate
+## 8. 전체 검수와 Publish Gate
 
-운영자가 Publish 전에 확인할 수 있어야 하는 항목:
+운영자가 전체 검수 완료 전에 확인할 수 있어야 하는 항목:
 
 - 책·저자·판본 식별 일치
 - 7개 section별 `MISSING | PARTIAL | READY` coverage
@@ -228,7 +244,11 @@ Builder는 하나의 긴 LLM 호출이 아니라 재시도 가능한 stage로 �
 - `LIMITED | CONFLICT | INSUFFICIENT` item 목록
 - schema/reference validation 결과
 
-모든 section이 `READY`여야만 Publish할 수 있다고 기계적으로 강제하지 않는다. 확인 가능한 자료가 부족한 책을 거짓 내용으로 채우는 결과가 되기 때문이다. 대신 책 식별 실패, 숨겨진 핵심 FACT 충돌, 유효하지 않은 reference와 schema 오류는 hard blocker로 두고, 허용된 부족 상태는 운영자가 확인한 사실을 감사 로그에 남긴다.
+내부 Tier와 evidence validation은 유지하지만 기본 운영자 UI에는 code나 Tier 문자를 노출하지 않는다. hard blocker는 `수정 필요`, warning은 `확인 필요`로 묶고 `근거 부족`, `검수 필요`, `출처 확인 불가` 같은 문장으로 설명한다.
+
+모든 section이 `READY`여야만 검수 완료할 수 있다고 기계적으로 강제하지 않는다. 확인 가능한 자료가 부족한 책을 거짓 내용으로 채우는 결과가 되기 때문이다. 대신 책 식별 실패, 숨겨진 핵심 FACT 충돌, 유효하지 않은 reference와 schema 오류는 `수정 필요`로 두고 해결 전 전체 검수 완료를 막는다. 허용된 부족 상태는 `확인 필요`로 표시하고 운영자가 Pack 단위로 한 번 확인한 사실을 감사 로그에 남긴다.
+
+전체 검수 완료 command는 현재 revision을 잠그고 내부 section/item 상태를 일괄 검수 완료로 기록한다. Publish command는 검수 완료와 별개이며 `reviewedRevision`이 현재 검수본과 일치할 때만 실행한다. 다시 수정하려면 Draft로 복귀해 검수 기록을 무효화하고 새 revision을 검수한다.
 
 ## 9. 권한과 노출
 
@@ -246,7 +266,7 @@ Builder는 하나의 긴 LLM 호출이 아니라 재시도 가능한 stage로 �
 
 - Public: `BookCatalogItem`, query/sort, room에 고정할 `packVersionId`
 - Internal: `BookContextDocumentV1`, section/item/source/evidence schema
-- Admin: Draft/Review snapshot, Builder run/progress, validation issue, version transition command
+- Admin: 외부 도서 검색·서명 selection, Draft/Review snapshot, Builder run/progress, validation issue, Pack-level 검수와 version transition command
 
 DB row를 contract로 직접 반환하지 않고 Provider/mapper에서 strict schema를 통과시킨다. `schemaVersion`이 다른 Pack은 명시적 adapter나 migration 없이 live consumer에 전달하지 않는다.
 
@@ -263,6 +283,8 @@ DB row를 contract로 직접 반환하지 않고 Provider/mapper에서 strict sc
 - item-source reference와 같은 version 소속 검증
 - Tier D/E를 FACT 단독 근거로 Publish하는 규칙 검증
 - admin command 권한·idempotency·감사 로그
+- 동일 Provider ID/ISBN의 중복 Pack 생성 방지
+- warning 정확 집합의 Pack 단위 확인과 reviewed revision pin
 
 ### Provider/AI fixture
 
@@ -296,6 +318,6 @@ DB row를 contract로 직접 반환하지 않고 Provider/mapper에서 strict sc
 - 조사 진행률·실패·재시도
 - 전체 감사 로그와 운영자 UI
 
-서버 구현 상태(2026-09-02): 위 항목의 contract, DB command/RLS, worker orchestration과 Admin HTTP API가 완료되었다. UI는 admin contract를 소비하는 별도 frontend 범위다. 실제 OpenAI 고정 eval은 7개 출처·22개 claim을 조사해 7개 section·22개 item·28개 evidence link 초안을 생성했고 canonical schema 검증을 통과했다. eval report에는 원문 대신 model, latency, token count와 구조 개수만 남겼다.
+구현 상태(2026-09-03): 위 항목의 contract, DB command/RLS, worker orchestration, Admin HTTP API와 운영자 UI가 완료되었다. Admin UI는 외부 도서 검색·판본 선택, 전체 내용 연속 편집, Pack 단위 검수 완료와 별도 Publish를 제공한다. 실제 OpenAI 고정 eval은 7개 출처·22개 claim을 조사해 7개 section·22개 item·28개 evidence link 초안을 생성했고 canonical schema 검증을 통과했다. eval report에는 원문 대신 model, latency, token count와 구조 개수만 남겼다.
 
 Slice 5보다 Slice 7이 뒤에 있더라도 AI가 `short_description`에 임시 결합하지 않도록 Slice 2A의 content model과 Provider는 먼저 완료한다.

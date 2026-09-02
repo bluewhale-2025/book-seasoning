@@ -291,7 +291,7 @@ select throws_ok(
       'c0300000-0000-4000-8000-000000000001', 2
     )
   $$,
-  '40001', 'command_payload_mismatch',
+  'P0001', 'command_payload_mismatch',
   'the same command id cannot be reused with a different payload'
 );
 
@@ -350,7 +350,7 @@ select throws_ok(
       'c0300000-0000-4000-8000-000000000002', 1
     )
   $$,
-  '40001', 'phase_version_conflict',
+  'P0001', 'phase_version_conflict',
   'a stale host decision loses to the committed transition'
 );
 

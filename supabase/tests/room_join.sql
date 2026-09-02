@@ -112,7 +112,7 @@ select throws_ok(
       2
     )
   $$,
-  '40001',
+  'P0001',
   'command_payload_mismatch',
   'same command id with a different payload is rejected'
 );
@@ -204,7 +204,7 @@ select throws_ok(
       null
     )
   $$,
-  '40001',
+  'P0001',
   'command_payload_mismatch',
   'join idempotency rejects a changed payload'
 );
@@ -236,7 +236,7 @@ select throws_ok(
       'full-room-token'
     )
   $$,
-  '40001',
+  'P0001',
   'room_capacity_reached',
   'capacity is checked while the room row is locked'
 );

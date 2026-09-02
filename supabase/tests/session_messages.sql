@@ -254,7 +254,7 @@ select throws_ok(
       '같은 id의 바뀐 본문', null
     )
   $$,
-  '40001',
+  'P0001',
   'command_payload_mismatch',
   'a client message id cannot be reused with another body'
 );
@@ -336,7 +336,7 @@ select throws_ok(
       '원문의 관점에 답합니다.', null
     )
   $$,
-  '40001',
+  'P0001',
   'command_payload_mismatch',
   'a reply retry cannot silently change its target'
 );

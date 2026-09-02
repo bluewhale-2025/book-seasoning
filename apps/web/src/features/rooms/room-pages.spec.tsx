@@ -283,6 +283,55 @@ describe("room product routes", () => {
     expect(screen.getByText("1명이 더 접속하면 시작할 수 있어요.")).toBeInTheDocument();
   });
 
+  it("refreshes room membership after a waiting-room heartbeat", async () => {
+    const detail = waitingDetail("HOST");
+    const staleDetail: RoomDetail = {
+      ...detail,
+      participantCount: 1,
+      members: detail.members.slice(0, 1),
+    };
+    const snapshot = {
+      ...waitingSnapshot("HOST"),
+      connectedParticipantCount: 2,
+      participants: waitingSnapshot("HOST").participants.map((participant) => ({
+        ...participant,
+        connectionStatus: "ONLINE" as const,
+      })),
+    };
+    const getRoom = vi.fn()
+      .mockResolvedValueOnce(staleDetail)
+      .mockResolvedValue(detail);
+
+    renderPage(<RoomDetailPage />, {
+      initialEntry: `/rooms/${roomId}`,
+      rooms: roomApiStub({
+        getRoom,
+        getPrepEntries: vi.fn().mockResolvedValue({ items: [] }),
+      }),
+      sessions: sessionApiStub({
+        sync: vi.fn().mockResolvedValue(snapshot),
+        heartbeat: vi.fn().mockResolvedValue({
+          roomId,
+          sessionId: snapshot.sessionId,
+          deviceId: commandId,
+          membershipStatus: "REGISTERED",
+          aggregateVersion: 2,
+          eventCursor: 0,
+          channelEpoch: 1,
+          connectedParticipantCount: 2,
+          heartbeatIntervalSeconds: 300,
+          onlineThresholdSeconds: 30,
+          lastSeenAt: snapshot.serverTime,
+          serverTime: snapshot.serverTime,
+        }),
+      }),
+    });
+
+    expect(await screen.findByText("수진")).toBeInTheDocument();
+    expect(screen.getByText("현재 2명 · 최대 6명")).toBeInTheDocument();
+    expect(getRoom).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps host controls hidden from a waiting participant", async () => {
     const detail = waitingDetail("PARTICIPANT");
     const snapshot = waitingSnapshot("PARTICIPANT");

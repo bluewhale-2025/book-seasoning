@@ -5,7 +5,7 @@ set +x
 required=(
   AWS_REGION LIGHTSAIL_SERVICE_NAME IMAGE_REFERENCE RELEASE_VERSION
   CORS_ORIGINS SUPABASE_URL SUPABASE_PUBLISHABLE_KEY SUPABASE_SECRET_KEY
-  WORKER_DATABASE_URL OPENAI_API_KEY COMMAND_FINGERPRINT_KEY
+  WORKER_DATABASE_URL OPENAI_API_KEY KAKAO_REST_API_KEY COMMAND_FINGERPRINT_KEY
 )
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
@@ -44,6 +44,7 @@ jq -n \
   --arg secret "$SUPABASE_SECRET_KEY" \
   --arg database "$WORKER_DATABASE_URL" \
   --arg openAi "$OPENAI_API_KEY" \
+  --arg kakao "$KAKAO_REST_API_KEY" \
   --arg evaluator "${OPENAI_EVALUATOR_MODEL:-gpt-5.6-luna}" \
   --arg host "${OPENAI_HOST_MODEL:-gpt-5.6-terra}" \
   --arg openAiTimeout "$openai_timeout_ms" \
@@ -58,7 +59,8 @@ jq -n \
           NODE_ENV: "production", SERVER_HOST: "0.0.0.0", SERVER_PORT: "3000",
           LOG_LEVEL: "info", RELEASE_VERSION: $release, CORS_ORIGINS: $cors,
           SUPABASE_URL: $supabaseUrl, SUPABASE_PUBLISHABLE_KEY: $publishable,
-          SUPABASE_SECRET_KEY: $secret, COMMAND_FINGERPRINT_KEY: $fingerprint
+          SUPABASE_SECRET_KEY: $secret, KAKAO_REST_API_KEY: $kakao,
+          COMMAND_FINGERPRINT_KEY: $fingerprint
         }
       },
       worker: {

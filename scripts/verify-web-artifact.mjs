@@ -17,6 +17,7 @@ const forbiddenText = [
   "SUPABASE_SECRET_KEY",
   "WORKER_DATABASE_URL",
   "OPENAI_API_KEY",
+  "KAKAO_REST_API_KEY",
   "COMMAND_FINGERPRINT_KEY",
   "postgresql://",
 ];

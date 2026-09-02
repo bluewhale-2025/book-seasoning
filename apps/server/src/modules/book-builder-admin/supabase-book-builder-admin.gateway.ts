@@ -26,6 +26,18 @@ export class SupabaseBookBuilderAdminGateway
 {
   public constructor(private readonly environment: RuntimeEnvironment) {}
 
+  public async assertAdmin(actor: AuthenticatedActor): Promise<void> {
+    const { data, error } = await this.client(actor)
+      .from("profiles")
+      .select("role")
+      .eq("user_id", actor.userId)
+      .maybeSingle();
+    if (error !== null) fail(error, "admin_access_check_failed");
+    if (data?.role !== "ADMIN") {
+      throw new BookBuilderAdminGatewayError("admin_required");
+    }
+  }
+
   public async create(
     actor: AuthenticatedActor,
     input: Parameters<BookBuilderAdminGateway["create"]>[1],
@@ -35,8 +47,24 @@ export class SupabaseBookBuilderAdminGateway
       {
         p_command_id: input.commandId,
         p_request_fingerprint: input.requestFingerprint,
-        p_title: input.title,
-        p_author: input.author,
+        p_provider: input.selection.provider,
+        p_external_book_id: input.selection.externalBookId,
+        p_selection: {
+          title: input.selection.title,
+          author: input.selection.authors.join(", "),
+          translator: input.selection.translators.length === 0
+            ? null
+            : input.selection.translators.join(", "),
+          publisher: input.selection.publisher,
+          publicationYear: input.selection.publishedDate === null
+            ? null
+            : Number(input.selection.publishedDate.slice(0, 4)),
+          isbn10: input.selection.isbn10,
+          isbn13: input.selection.isbn13,
+          coverUrl: input.selection.thumbnailUrl,
+          description: input.selection.description,
+          detailUrl: input.selection.detailUrl,
+        },
       },
     );
     if (error !== null) fail(error, "book_context_create_failed");
@@ -84,6 +112,7 @@ export class SupabaseBookBuilderAdminGateway
       p_request_fingerprint: input.requestFingerprint,
       p_pack_version_id: packVersionId,
       p_expected_revision: input.expectedRevision,
+      p_acknowledged_warnings: input.acknowledgedWarnings,
     });
   }
 
@@ -110,7 +139,6 @@ export class SupabaseBookBuilderAdminGateway
       p_request_fingerprint: input.requestFingerprint,
       p_pack_version_id: packVersionId,
       p_expected_revision: input.expectedRevision,
-      p_acknowledged_warnings: input.acknowledgedWarnings,
     });
   }
 

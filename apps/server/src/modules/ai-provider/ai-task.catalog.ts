@@ -7,13 +7,14 @@ import type {
   OpeningOutputV1,
   PublicContextV1,
   PublicEvaluatorOutputV1,
+  PublicEvidenceRef,
   SynthesisOutputV1,
 } from "@bookseasoning/contracts/internal";
 import {
   DiscussionRecordOutputV1Schema,
   HostInterventionOutputV1Schema,
   OpeningOutputV1Schema,
-  PublicEvaluatorOutputV1Schema,
+  PublicEvaluatorProviderOutputV1Schema,
   SynthesisOutputV1Schema,
 } from "@bookseasoning/contracts/internal";
 
@@ -21,7 +22,8 @@ import type { AiStructuredTask } from "./ai-gateway.js";
 
 const PUBLIC_EVALUATOR_INSTRUCTIONS = `
 당신은 공개 독서토론의 Evaluator와 PUBLIC Living Wiki patch 작성기다.
-입력 JSON은 PUBLIC 정보만 포함하며, 입력에 실제로 존재하는 evidence reference만 사용한다.
+입력 JSON은 PUBLIC 정보만 포함한다. 모든 evidence reference는 allowedEvidenceRefs의 객체를 필드까지 그대로 복사해서 사용하며 UUID를 새로 만들거나 추측하지 않는다.
+출력의 packVersionId, baseWikiVersion, targetThroughSeq는 requiredOutputEnvelope의 값을 그대로 복사한다.
 7개 Discussion Metrics를 서로 독립적으로 평가하고 총점으로 합치지 않는다.
 각 metric의 level과 reasonCodes는 다음 allow-list만 사용한다.
 - depth LOW: REACTIONS_OR_ASSERTIONS_ONLY; MEDIUM: REASONS_OR_BOOK_EVIDENCE_PRESENT; HIGH: REASONS_AND_ASSUMPTIONS_COMPARED, COUNTERARGUMENTS_OR_REVISIONS_PRESENT
@@ -37,7 +39,7 @@ Book Grounding에는 공개 토론 메시지와 Pack item을 함께 연결하고
 wikiPatch는 입력 base version과 target cursor에 대한 typed operation만 만들며 stable UUID id를 사용한다.
 baseWiki가 null(base version 0)이면 빈 문서를 완성하는 초기 patch를 만든다. 최소한 SET_METRICS_AND_KEY_CHANGES를 포함하고, top-level currentTopic·majorPerspectives·bookGrounding·participation에 선택한 항목을 각각 SET_CURRENT_TOPIC 또는 대응 UPSERT operation으로 동일하게 반영한다.
 baseWiki가 있더라도 SET_METRICS_AND_KEY_CHANGES로 이번 7개 metric과 key change를 반영하며, top-level에 반환한 currentTopic·majorPerspectives·bookGrounding·participation은 patch 적용 후 문서에 같은 값으로 존재해야 한다.
-relation과 coverage는 같은 patch의 최종 문서에 실제로 존재하는 ID만 가리킨다.
+relation, connectedPerspectiveIds, relatedPerspectiveIds와 coverage는 같은 patch의 최종 문서에 실제로 존재하는 ID만 그대로 복사해 가리키며 확실하지 않으면 관계 배열을 비운다.
 suggestedAction은 참고 신호일 뿐 최종 Policy가 아니며, 좋은 인간 대화가 진행 중이면 WAIT를 제안할 수 있다.
 출력은 지정된 schema 하나만 만족해야 한다.
 `.trim();
@@ -95,10 +97,10 @@ export const publicEvaluatorTask = (
         : "PUBLIC_EVALUATOR_INCREMENTAL_V1",
   modelAlias: "EVALUATOR_FAST",
   reasoningEffort: "low",
-  promptVersion: "public-evaluator.v2",
+  promptVersion: "public-evaluator.v4",
   outputSchemaVersion: "public-evaluator-output.v1",
   outputSchemaName: "public_evaluator_output_v1",
-  outputSchema: PublicEvaluatorOutputV1Schema,
+  outputSchema: PublicEvaluatorProviderOutputV1Schema,
   instructions: PUBLIC_EVALUATOR_INSTRUCTIONS,
   maxOutputTokens: 12_000,
 });
@@ -151,7 +153,15 @@ export const discussionRecordTask = {
   maxOutputTokens: 6_000,
 } satisfies AiStructuredTask<DiscussionRecordOutputV1>;
 
-export type PublicEvaluatorTaskInput = PublicContextV1;
+export type PublicEvaluatorTaskInput = Readonly<{
+  context: PublicContextV1;
+  requiredOutputEnvelope: Readonly<{
+    packVersionId: string;
+    baseWikiVersion: number;
+    targetThroughSeq: number;
+  }>;
+  allowedEvidenceRefs: readonly PublicEvidenceRef[];
+}>;
 export type OpeningTaskInput = OpeningContextV1;
 export type HostInterventionTaskInput = HostContextV1;
 export type SynthesisTaskInput = PublicContextV1;

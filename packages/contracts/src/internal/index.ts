@@ -86,6 +86,7 @@ export {
 export {
   PublicEvaluatorOutputSchemaVersionSchema,
   PublicEvaluatorOutputV1Schema,
+  PublicEvaluatorProviderOutputV1Schema,
   type PublicEvaluatorOutputV1,
 } from "./ai-evaluator.js";
 export {

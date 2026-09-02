@@ -1,10 +1,11 @@
 import type {
+  AdminBookSelection,
   AdminBookContextPackListResponse,
   AdminBookContextPackSnapshot,
   AdminPackCommandResponse,
   BuilderPackCommandRequest,
-  CreateBookContextPackRequest,
   CreateBookContextPackResponse,
+  CompleteBookContextReviewRequest,
   PublishBookContextPackRequest,
   ProposalCommandRequest,
   RegenerateBookContextRequest,
@@ -27,9 +28,13 @@ export class BookBuilderAdminGatewayError extends Error {
 type WithFingerprint<T> = T & Readonly<{ requestFingerprint: string }>;
 
 export interface BookBuilderAdminGateway {
+  assertAdmin(actor: AuthenticatedActor): Promise<void>;
   create(
     actor: AuthenticatedActor,
-    input: WithFingerprint<CreateBookContextPackRequest>,
+    input: WithFingerprint<Readonly<{
+      commandId: string;
+      selection: AdminBookSelection;
+    }>>,
   ): Promise<CreateBookContextPackResponse>;
   list(actor: AuthenticatedActor): Promise<AdminBookContextPackListResponse>;
   get(
@@ -44,7 +49,7 @@ export interface BookBuilderAdminGateway {
   review(
     actor: AuthenticatedActor,
     packVersionId: string,
-    input: WithFingerprint<BuilderPackCommandRequest>,
+    input: WithFingerprint<CompleteBookContextReviewRequest>,
   ): Promise<AdminPackCommandResponse>;
   returnToDraft(
     actor: AuthenticatedActor,

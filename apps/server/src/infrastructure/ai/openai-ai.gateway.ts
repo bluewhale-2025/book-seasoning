@@ -5,6 +5,7 @@ import OpenAI, {
   APIError,
 } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
+import { ZodError } from "zod";
 
 import {
   AiProviderRunV1Schema,
@@ -32,7 +33,7 @@ export function createOpenAiClient(
   if (environment.openAiApiKey === undefined) return undefined;
   return new OpenAI({
     apiKey: environment.openAiApiKey,
-    timeout: environment.openAiTimeoutMs ?? 20_000,
+    timeout: environment.openAiTimeoutMs ?? 120_000,
     maxRetries: 0,
   });
 }
@@ -144,6 +145,9 @@ export class OpenAiGateway implements AiGateway {
   }
 
   private errorCode(error: unknown): string {
+    if (error instanceof ZodError) {
+      return "AI_PROVIDER_OUTPUT_INVALID";
+    }
     if (error instanceof APIConnectionTimeoutError) {
       return "AI_PROVIDER_TIMEOUT";
     }

@@ -27,6 +27,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [message, setMessage] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const composingRef = React.useRef(false);
 
   function resizeTextarea() {
     const textarea = textareaRef.current;
@@ -89,8 +90,17 @@ export function MessageComposer({
             onTypingChange?.(event.target.value.trim().length > 0);
             resizeTextarea();
           }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
+              if (composingRef.current || event.nativeEvent.isComposing || event.keyCode === 229) {
+                return;
+              }
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }

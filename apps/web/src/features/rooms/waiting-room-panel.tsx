@@ -50,7 +50,7 @@ export function WaitingRoomPanel({
       try {
         const response = await sessions.heartbeat(detail.roomId, deviceId);
         delay = response.heartbeatIntervalSeconds * 1000;
-        await snapshot.refetch();
+        await Promise.all([snapshot.refetch(), onRefresh()]);
       } catch {
         delay = 15_000;
       }
@@ -61,7 +61,7 @@ export function WaitingRoomPanel({
       stopped = true;
       if (timeout) clearTimeout(timeout);
     };
-  }, [detail.roomId, sessions, snapshot.refetch]);
+  }, [detail.roomId, onRefresh, sessions, snapshot.refetch]);
 
   const session = snapshot.data;
   const isHost = detail.actorRole === "HOST";

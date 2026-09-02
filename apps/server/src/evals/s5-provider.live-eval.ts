@@ -17,6 +17,7 @@ import {
 } from "../infrastructure/ai/openai-ai.gateway.js";
 import type { PublicEvidenceResolver } from "../modules/ai-context/public-evidence-reference.resolver.js";
 import { HostContextBuilder } from "../modules/ai-host/host-context.builder.js";
+import { publicEvaluatorPromptInput } from "../modules/ai-context/public-context-evidence.js";
 import { HostOutputValidator } from "../modules/ai-host/host-output.validator.js";
 import { OpeningOutputValidator } from "../modules/ai-host/opening-output.validator.js";
 import { PublicAiOutputSafetyValidator } from "../modules/ai-host/public-ai-output-safety.validator.js";
@@ -151,7 +152,7 @@ async function evaluateHost(): Promise<EvalReport> {
 async function evaluatePublicEvaluator(): Promise<EvalReport> {
   const generated = await gateway.generate(
     publicEvaluatorTask("INCREMENTAL"),
-    evaluatorContext,
+    publicEvaluatorPromptInput(evaluatorContext),
   );
   const output = await new PublicEvaluatorOutputValidator(resolver).validate(
     evaluatorJob,

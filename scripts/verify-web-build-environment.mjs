@@ -45,6 +45,7 @@ const forbidden = [
   "VITE_SUPABASE_SECRET_KEY",
   "VITE_WORKER_DATABASE_URL",
   "VITE_OPENAI_API_KEY",
+  "VITE_KAKAO_REST_API_KEY",
   "VITE_COMMAND_FINGERPRINT_KEY",
 ];
 const exposed = forbidden.filter((name) => process.env[name]?.trim());

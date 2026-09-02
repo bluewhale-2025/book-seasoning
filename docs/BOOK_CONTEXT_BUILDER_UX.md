@@ -1,15 +1,15 @@
 # 책은양념 Book Context Builder UX v0.1
 
-> Status: Proposed Builder UX baseline  
+> Status: Implemented Builder UX baseline
 > Product source of truth: `PRODUCT_SPEC.md` §18~§20  
 > Detailed contract: `docs/BOOK_CONTEXT_SPEC.md`  
 > Shared UX baseline: `docs/UX_PLAN.md`, `docs/DESIGN_SYSTEM.md`  
-> Related decisions: `PRODUCT-025`, `PRODUCT-027`, `PRODUCT-028`, `TECH-024`  
-> Last updated: 2026-09-02
+> Related decisions: `PRODUCT-025`, `PRODUCT-027`, `PRODUCT-028`, `PRODUCT-033`, `TECH-024`, `TECH-027`, `TECH-029`
+> Last updated: 2026-09-03
 
 ## 0. 목적과 범위
 
-운영자가 공개 자료로 생성된 Book Context Pack을 검수하고 실제 토론에 사용할 version을 명시적으로 Publish하는 흐름을 정의한다. 새로운 Pack 생성, durable 조사 stage, Draft 편집, 항목·출처 검수, 재생성 diff, Review Gate, Publish·Retire와 version history가 범위다.
+운영자가 외부 카탈로그에서 정확한 책·판본을 선택하고, 공개 자료로 생성된 Book Context Pack 전체를 읽어 수정·삭제한 뒤 검수 완료하고 실제 토론에 사용할 version을 명시적으로 Publish하는 흐름을 정의한다.
 
 이 화면은 다음 기능을 제공하지 않는다.
 
@@ -22,7 +22,7 @@
 
 1. 정보 부족과 충돌을 숨기지 않는다.
 2. 자동 생성과 운영자 수정의 경계를 보존한다.
-3. 검수는 점수 올리기가 아니라 출처·성격·불확실성 확인이다.
+3. 검수는 item 상태를 하나씩 바꾸는 작업이 아니라 Pack 전체 내용과 근거를 읽고 필요한 부분을 수정·삭제하는 일이다.
 4. 자동 저장은 조용히 표시하고 실패할 때만 행동을 요구한다.
 5. Publish와 Retire는 영향과 version 전이를 문장으로 확인한다.
 6. `Published`는 불변이며 편집 control을 제공하지 않는다.
@@ -33,13 +33,14 @@
 ```text
 Book Context 관리
 ├── Pack 목록
-├── 새 Pack
+├── 새 Pack: 외부 도서 검색 → 판본 선택 → 확인
 ├── Builder run
 └── Pack version
-    ├── 7개 section
+    ├── 연속해서 읽는 7개 section
     ├── item 편집과 source evidence
     ├── 재생성 diff
-    ├── Review Gate
+    ├── 수정 필요 / 확인 필요
+    ├── 전체 검수 완료
     └── version history / Publish / Retire
 ```
 
@@ -52,7 +53,7 @@ ADMIN 계정의 app shell에만 `Book Context 관리` 진입점을 추가한다.
 1. 표지 또는 표지 미확인 placeholder
 2. 책 제목·저자·판본
 3. 현재 작업 version
-4. `Draft / Review / Published / Retired`
+4. `생성 중 / 작성 중 / 검수 완료 / 게시됨 / 게시 중단`
 5. 마지막 변경 시각
 6. Builder 실행 중·실패 상태가 있을 때만 짧은 상태
 
@@ -60,7 +61,14 @@ row 전체로 해당 version에 진입한다. `편집 / 보기` 버튼을 반복
 
 ## 4. BC-02 새 Pack과 조사 진행
 
-새 Pack form은 `책 제목 + 저자`만 받는다. 제출 후 별도 빈 대기 화면으로 보내지 않고 Builder run으로 이동한다.
+`새 Pack`은 자유 입력 form이 아니라 외부 도서 검색 dialog다.
+
+1. 제목, 저자 또는 ISBN을 검색한다.
+2. 결과의 표지, 제목, 저자, 번역자, 출판사, 출간일과 ISBN을 비교한다.
+3. 판본 하나를 선택하고 확인 화면에서 다시 확인한다.
+4. `이 책으로 Pack 만들기`를 실행하고 Builder run으로 이동한다.
+
+검색 결과가 없으면 다른 검색어나 ISBN을 안내하고 수동 등록 control은 제공하지 않는다. 동일 판본의 Pack이 이미 있으면 새 Pack을 만들지 않고 기존 Pack으로 이동한다.
 
 Builder stage:
 
@@ -85,12 +93,14 @@ Builder stage:
 - 책·판본 identity
 - version과 `Draft`
 - 자동 저장 상태
-- `Publish 검수로 이동`
+- `전체 검수 완료`
 - version history 진입
 
-### 5.2 section navigation
+Builder run이 `PENDING / RUNNING / RETRYING`인 동안에는 입력과 lifecycle action을 잠근다. 실행이 완료된 뒤 반환된 최신 revision을 기준으로 편집을 시작하며, stale revision 저장 충돌이 발생하면 자동 재시도하지 않고 로컬 입력을 보존한 채 운영자에게 최신본 재로딩을 요구한다.
 
-7개 section은 사용자용 한국어 label과 coverage를 함께 표시한다.
+### 5.2 section navigation과 연속 검토
+
+7개 section은 한 페이지에 위에서 아래로 모두 표시한다. navigation은 다음 section으로 이동하는 목차이며 section 상태를 바꾸는 control이 아니다.
 
 - 기본 메타정보
 - 전체 구조와 흐름
@@ -100,11 +110,13 @@ Builder stage:
 - 토론 가능 쟁점
 - 해석상 주의사항
 
-coverage는 `미확인 / 일부 확인 / 검수 준비`로 표시한다. `미확인`은 실패가 아니라 확인 가능한 자료가 부족할 수 있는 상태다.
+section coverage는 내부 자동 검사의 참고값으로 유지할 수 있지만 운영자 기본 화면에는 표시하거나 직접 선택하게 하지 않는다.
 
 ### 5.3 item row
 
-각 row는 제목, `사실 / 저자 발언 / 해석 / 토론 신호`, `근거 충분 / 제한된 근거 / 출처 충돌 / 정보 부족`, source 개수만 표시한다. row 전체로 상세에 진입하고 상태마다 설명 문장을 반복하지 않는다.
+각 item은 제목, 내용, `사실 / 저자 발언 / 해석 / 토론 신호`, 직관적인 근거 상태, 책 위치와 source 개수를 표시한다. 운영자는 inline으로 수정·삭제하고 item별 `검수됨/미검수`를 지정하지 않는다.
+
+`항목 추가` 직후에는 제목과 내용을 빈 입력으로 제공한다. 두 값이 모두 비어 있으면 자동 저장 payload에서 제외하고, 어느 한쪽만 작성한 경우에는 `제목과 내용을 모두 입력해야 저장됩니다`라고 표시하며 저장과 전체 검수 완료를 보류한다. 두 값을 모두 입력한 뒤에만 일반 Draft item으로 저장한다.
 
 ## 6. BC-04 항목과 출처 검수
 
@@ -117,7 +129,7 @@ Draft에서만 내용을 수정한다.
 5. 관련 item
 6. source evidence 목록
 
-source row는 Tier, source 제목·발행 주체, `지지 / 반박 / 맥락`, locator와 접근 상태를 보여준다. Tier D/E가 FACT의 단독 근거인 경우 Review blocker로 연결한다.
+source row는 source 유형, 제목·발행 주체, `뒷받침 / 반박 / 맥락`, locator와 접근 상태를 보여준다. Tier A~E는 내부 품질 판정에 유지하지만 기본 UI에서는 문자 등급과 선택 control을 숨긴다. 근거가 약하면 `근거 부족`, 접근할 수 없으면 `출처 확인 불가`로 설명한다.
 
 `항목 재생성`과 `항목 삭제`는 icon-only로 실행하지 않는다. 재생성은 현재본을 보존한 채 새 후보를 만들고 diff 확인으로 이동한다. 삭제는 대상과 source relation 영향을 확인한다.
 
@@ -130,31 +142,30 @@ desktop에서는 `현재 Draft / 새 생성본`을 나란히, mobile에서는 �
 
 server 성공 전에는 새 생성본을 Draft로 표시하지 않는다. 다른 운영자 변경이나 stale revision이 확인되면 자동 병합하지 않고 최신 Draft를 다시 불러온다.
 
-## 8. BC-06 Review와 Publish Gate
+## 8. BC-06 전체 검수 완료와 Publish Gate
 
-Review 화면은 다음 순서를 따른다.
+작성 화면은 다음 순서를 따른다.
 
 1. 책·version identity와 상태
-2. hard blocker
-3. 확인이 필요한 warning
-4. 7개 section coverage
-5. Publish action
+2. `수정 필요 N건 · 확인 필요 N건` 요약
+3. 7개 section과 출처의 연속 본문
+4. 전체 검수 완료 action
 
-Hard blocker 예:
+`수정 필요` 예:
 
 - 책·저자·판본 식별 실패
 - 숨겨진 핵심 FACT 충돌
 - 유효하지 않은 item/source reference
 - schema 오류
-- Tier D/E를 FACT 단독 근거로 사용
+- 핵심 사실을 뒷받침할 신뢰 가능한 출처가 없음
 
-허용 가능한 warning 예:
+`확인 필요` 예:
 
 - 일부 section이 `일부 확인`
 - `제한된 근거 / 정보 부족` item
 - 공개 자료 접근 실패
 
-모든 section을 `검수 준비`로 만들도록 강제하지 않는다. warning을 확인한 운영자는 부족 상태를 그대로 보존한 채 Publish할 수 있으며 확인 사실은 감사 로그에 남긴다. hard blocker가 하나라도 있으면 Publish action을 제공하지 않는다.
+`수정 필요`가 하나라도 있으면 전체 검수 완료 action을 실행할 수 없다. `확인 필요`가 남아 있으면 dialog에서 목록을 읽고 `표시된 확인 필요 항목을 모두 확인했습니다`를 한 번 확인한다. 성공하면 상태가 `검수 완료`가 되고 편집이 잠긴다. `게시하기`는 검수 완료 상태에서 별도의 확인 dialog로 실행한다. 수정이 더 필요하면 `다시 수정하기`로 작성 중 상태에 돌아간다.
 
 ## 9. BC-07 Publish 확인
 
@@ -165,7 +176,7 @@ Publish 확인에는 다음 영향을 명시한다.
 - 기존 활성 Published version은 Retired
 - 이미 생성된 방과 세션은 고정된 기존 version을 계속 사용
 
-실행 label은 `v2 Publish`처럼 대상 version을 포함한다. 성공 전에는 Published badge나 catalog 노출을 먼저 변경하지 않는다.
+실행 label은 `게시`처럼 제품 언어를 사용한다. 성공 전에는 게시됨 badge나 catalog 노출을 먼저 변경하지 않는다.
 
 ## 10. BC-08 version history와 Publish 취소
 
@@ -196,8 +207,8 @@ Publish 취소는 실제로 `Retired` 전환이다. 확인 dialog에서 운영 �
 
 ## 12. 반응형과 접근성
 
-- desktop 736px 이상: section navigation과 item list를 제한적인 2-column으로 사용한다.
-- mobile 320px 이상: section navigation을 native select로 바꾸고 item, source와 diff를 한 열로 쌓는다.
+- desktop 736px 이상: 왼쪽 목차와 오른쪽 연속 본문을 2-column으로 사용한다.
+- mobile 320px 이상: 목차, item, source와 diff를 한 열로 쌓는다.
 - page 전체 horizontal scroll을 만들지 않는다.
 - icon-only back, retry, close, source 추가에 accessible name과 tooltip을 제공한다.
 - state, evidence와 coverage는 색만으로 구분하지 않는다.
@@ -207,29 +218,24 @@ Publish 취소는 실제로 `Retired` 전환이다. 확인 dialog에서 운영 �
 
 ## 13. 검증 시나리오
 
-1. 제목·저자로 Pack을 만들고 Builder stage를 확인한다.
+1. 제목, 저자 또는 ISBN 검색 결과에서 정확한 판본을 선택하고 Builder stage를 확인한다.
 2. 실패 stage를 재시도해 Draft와 운영자 수정이 유지되는지 확인한다.
-3. 7개 section coverage와 item의 유형·evidence·source relation을 검수한다.
+3. 7개 section을 연속해서 읽고 item을 수정·삭제하되 item·section별 검수 상태 control이 없는지 확인한다.
 4. 항목 재생성 diff에서 현재본 유지와 변경 반영을 각각 확인한다.
-5. hard blocker가 있으면 Publish할 수 없고 warning은 확인 후 Publish할 수 있다.
+5. `수정 필요`가 있으면 전체 검수를 완료할 수 없고 `확인 필요`는 Pack 단위 한 번의 확인 후 검수 완료할 수 있다.
 6. 새 version Publish가 기존 활성 version만 Retired로 전환하고 기존 방 pin을 유지한다.
 7. Published 직접 편집이 불가능하고 새 Draft version으로만 수정한다.
 8. Publish 취소 사유 없이 실행할 수 없고 Retired version을 삭제하지 않는다.
 9. ADMIN이 아닌 사용자가 Builder 화면과 command를 사용할 수 없다.
 10. 320px와 keyboard-only에서 주요 흐름을 완료한다.
 
-## 14. 인터랙티브 시안 검증 결과
+## 14. 구현 검증 결과
 
-2026-09-02 기준 `book-context-builder.html` 시안에서 다음을 확인했다.
+2026-09-03 기준 React 구현과 contract/server/DB 테스트에서 다음을 확인했다.
 
 - Pack 필수 입력 검증과 durable stage retry가 동작하며 재시도 안내가 기존 작업 보존을 명시한다.
 - 재생성은 현재본과 새 생성본을 비교한 뒤 `현재본 유지 / 변경사항 반영` 중 하나를 선택해야 종료된다.
-- warning 2개를 모두 확인하기 전까지 Publish가 비활성화되고, 확인 후 version 영향 dialog가 열린다.
+- 내부 warning 목록은 Pack 단위로 한 번 확인해야 전체 검수를 완료할 수 있고 Publish는 별도 확인 dialog에서 실행된다.
 - Publish 취소 사유가 비어 있으면 실행할 수 없고, dialog 닫기 후 focus가 실행 control로 복귀한다.
-- 1200px에서 section navigation과 item list가 2-column으로 표시되고 horizontal overflow가 없다.
-- 320px 검증 환경의 실제 content width 273–288px에서 8개 화면과 Publish·Retire dialog에 horizontal overflow가 없다.
-- 모든 icon-only button에 accessible name이 있고 duplicate id가 없으며 실패 메시지는 `role="alert"`, 상태 변경은 `aria-live="polite"`로 전달된다.
-
-시안 파일:
-
-`/Users/jiminyeon/.codex/visualizations/2026/09/01/01a05d63-353f-7612-a460-3b8712b8486a/book-context-builder.html`
+- 도서 검색 `selectionProof`, 동일 판본 중복 방지, Pack-level 검수 revision과 warning acknowledgement가 contract/DB 테스트로 고정된다.
+- 기술 Tier 표시는 기본 UI에서 제거되고 사용자 문구는 `수정 필요`, `확인 필요`, `근거 부족`, `출처 확인 불가`로 매핑된다.

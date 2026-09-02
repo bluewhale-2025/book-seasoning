@@ -6,14 +6,18 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Put,
 } from "@nestjs/common";
 
 import {
   AdminBookContextPackListResponseSchema,
   AdminBookContextPackSnapshotSchema,
+  AdminBookSearchQuerySchema,
+  AdminBookSearchResponseSchema,
   AdminPackCommandResponseSchema,
   BuilderPackCommandRequestSchema,
+  CompleteBookContextReviewRequestSchema,
   CreateBookContextPackRequestSchema,
   CreateBookContextPackResponseSchema,
   PublishBookContextPackRequestSchema,
@@ -25,6 +29,7 @@ import {
   RetryBookBuilderRunResponseSchema,
   UpdateBookContextDraftRequestSchema,
   type BuilderPackCommandRequest,
+  type CompleteBookContextReviewRequest,
   type CreateBookContextPackRequest,
   type PublishBookContextPackRequest,
   type ProposalCommandRequest,
@@ -46,6 +51,18 @@ export class BookBuilderAdminController {
     @Inject(BookBuilderAdminService)
     private readonly service: BookBuilderAdminService,
   ) {}
+
+  @Get("books/search")
+  public async searchBooks(
+    @CurrentActor() actor: AuthenticatedActor,
+    @Query(new ZodValidationPipe(AdminBookSearchQuerySchema)) query: unknown,
+  ) {
+    return this.safe(
+      AdminBookSearchResponseSchema.parse(
+        await this.service.searchBooks(actor, AdminBookSearchQuerySchema.parse(query)),
+      ),
+    );
+  }
 
   @Post("packs")
   public async create(
@@ -97,8 +114,8 @@ export class BookBuilderAdminController {
   public async review(
     @CurrentActor() actor: AuthenticatedActor,
     @Param("packVersionId", new ParseUUIDPipe()) packVersionId: string,
-    @Body(new ZodValidationPipe(BuilderPackCommandRequestSchema))
-    request: BuilderPackCommandRequest,
+    @Body(new ZodValidationPipe(CompleteBookContextReviewRequestSchema))
+    request: CompleteBookContextReviewRequest,
   ) {
     return this.command(this.service.review(actor, packVersionId, request));
   }

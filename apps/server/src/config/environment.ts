@@ -25,7 +25,13 @@ const EnvironmentSchema = z.object({
   OPENAI_API_KEY: z.string().min(20).optional(),
   OPENAI_EVALUATOR_MODEL: z.string().min(1).max(100).default("gpt-5.6-luna"),
   OPENAI_HOST_MODEL: z.string().min(1).max(100).default("gpt-5.6-terra"),
-  OPENAI_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
+  OPENAI_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(120_000)
+    .default(120_000),
+  KAKAO_REST_API_KEY: z.string().min(10).optional(),
   COMMAND_FINGERPRINT_KEY: z.string().min(32).optional(),
 });
 
@@ -47,6 +53,7 @@ export type RuntimeEnvironment = Readonly<{
   openAiEvaluatorModel?: string;
   openAiHostModel?: string;
   openAiTimeoutMs?: number;
+  kakaoRestApiKey?: string;
   commandFingerprintKey: string;
 }>;
 
@@ -111,6 +118,13 @@ export function loadEnvironment(
   if (data.NODE_ENV === "production" && data.COMMAND_FINGERPRINT_KEY === undefined) {
     invalidFields.push("COMMAND_FINGERPRINT_KEY");
   }
+  if (
+    data.NODE_ENV === "production" &&
+    runtime === "api" &&
+    data.KAKAO_REST_API_KEY === undefined
+  ) {
+    invalidFields.push("KAKAO_REST_API_KEY");
+  }
 
   if (invalidFields.length > 0) {
     fail(invalidFields);
@@ -138,6 +152,9 @@ export function loadEnvironment(
     openAiEvaluatorModel: data.OPENAI_EVALUATOR_MODEL,
     openAiHostModel: data.OPENAI_HOST_MODEL,
     openAiTimeoutMs: data.OPENAI_TIMEOUT_MS,
+    ...(data.KAKAO_REST_API_KEY === undefined
+      ? {}
+      : { kakaoRestApiKey: data.KAKAO_REST_API_KEY }),
     commandFingerprintKey:
       data.COMMAND_FINGERPRINT_KEY ??
       "bookseasoning-local-command-fingerprint-key-only",

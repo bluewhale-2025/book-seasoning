@@ -156,7 +156,7 @@ export function RoomDetailPage() {
               <div className="flex items-center gap-3"><CalendarDays aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-body">{formatRoomDate(detail.scheduledStartAt)}</span></div>
               <div className="flex items-center gap-3"><UsersRound aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-body">현재 {detail.participantCount}명 · 최대 {detail.maxParticipants}명</span></div>
             </section>
-            <WaitingRoomPanel detail={detail} onRefresh={() => room.refetch()} />
+            <WaitingRoomPanel detail={detail} onRefresh={room.refetch} />
           </div>
         ) : (
         <div className="grid gap-8 pt-8 md:grid-cols-[minmax(0,1fr)_280px]">
@@ -168,7 +168,7 @@ export function RoomDetailPage() {
             </section>
 
             {isMember && (
-              <RoomMembersSection detail={detail} onRefresh={() => room.refetch()} />
+              <RoomMembersSection detail={detail} onRefresh={room.refetch} />
             )}
           </div>
 

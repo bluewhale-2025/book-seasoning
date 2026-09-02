@@ -6,6 +6,15 @@ import {
   BookBuilderStageSchema,
 } from "../internal/book-builder.js";
 
+const UtcServerTimeSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)
+      ? `${value}Z`
+      : value,
+  z.iso.datetime({ offset: true }),
+);
+
 export const AdminPackStatusSchema = z.enum([
   "DRAFT",
   "REVIEW",
@@ -30,18 +39,47 @@ export const BuilderRunSchema = z.strictObject({
   scope: BookBuilderScopeSchema,
   targetItemId: z.uuid().nullable(),
 });
+
+export const BookCatalogSearchProviderSchema = z.literal("KAKAO");
+export const AdminBookSelectionSchema = z.strictObject({
+  provider: BookCatalogSearchProviderSchema,
+  externalBookId: z.string().trim().min(1).max(1000),
+  title: z.string().trim().min(1).max(300),
+  authors: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
+  translators: z.array(z.string().trim().min(1).max(200)).max(20),
+  publisher: z.string().trim().min(1).max(200).nullable(),
+  publishedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  isbn10: z.string().regex(/^\d{9}[\dX]$/).nullable(),
+  isbn13: z.string().regex(/^\d{13}$/).nullable(),
+  thumbnailUrl: z.url().nullable(),
+  description: z.string().trim().min(1).max(1000).nullable(),
+  detailUrl: z.url().nullable(),
+});
+export const AdminBookSearchResultSchema = AdminBookSelectionSchema.extend({
+  selectionProof: z.string().min(1).max(12_000),
+});
+export const AdminBookSearchResponseSchema = z.strictObject({
+  query: z.string().trim().min(1).max(200),
+  page: z.int().min(1).max(50),
+  isEnd: z.boolean(),
+  results: z.array(AdminBookSearchResultSchema).max(20),
+});
+export const AdminBookSearchQuerySchema = z.strictObject({
+  q: z.string().trim().min(1).max(200),
+  page: z.coerce.number().int().min(1).max(50).default(1),
+});
 export const CreateBookContextPackRequestSchema = z.strictObject({
   commandId: z.uuid(),
-  title: z.string().trim().min(1).max(300),
-  author: z.string().trim().min(1).max(200),
+  selectionProof: z.string().min(1).max(12_000),
 });
 export const CreateBookContextPackResponseSchema = z.strictObject({
   packVersionId: z.uuid(),
-  status: z.literal("DRAFT"),
+  status: AdminPackStatusSchema,
   revision: z.int().nonnegative(),
-  run: BuilderRunSchema,
+  run: BuilderRunSchema.nullable(),
+  outcome: z.enum(["CREATED", "EXISTING"]),
   duplicate: z.boolean(),
-  serverTime: z.iso.datetime({ offset: true }),
+  serverTime: UtcServerTimeSchema,
 });
 export const AdminBookContextPackSummarySchema = z.strictObject({
   packVersionId: z.uuid(),
@@ -83,10 +121,11 @@ export const BuilderPackCommandRequestSchema = z.strictObject({
   commandId: z.uuid(),
   expectedRevision: z.int().nonnegative(),
 });
-export const PublishBookContextPackRequestSchema =
+export const CompleteBookContextReviewRequestSchema =
   BuilderPackCommandRequestSchema.extend({
     acknowledgedWarnings: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).max(100),
   });
+export const PublishBookContextPackRequestSchema = BuilderPackCommandRequestSchema;
 export const RetireBookContextPackRequestSchema =
   BuilderPackCommandRequestSchema.extend({
     reason: z.string().trim().min(1).max(500),
@@ -97,7 +136,7 @@ export const RetryBookBuilderRunRequestSchema = z.strictObject({
 export const RetryBookBuilderRunResponseSchema = BuilderRunSchema.extend({
   jobId: z.uuid(),
   duplicate: z.boolean(),
-  serverTime: z.iso.datetime({ offset: true }),
+  serverTime: UtcServerTimeSchema,
 });
 export const RegenerateBookContextRequestSchema = z.strictObject({
   commandId: z.uuid(),
@@ -117,7 +156,7 @@ export const RegenerateBookContextResponseSchema = z.strictObject({
   run: BuilderRunSchema,
   jobId: z.uuid(),
   duplicate: z.boolean(),
-  serverTime: z.iso.datetime({ offset: true }),
+  serverTime: UtcServerTimeSchema,
 });
 export const ProposalCommandRequestSchema = z.strictObject({
   commandId: z.uuid(),
@@ -128,16 +167,21 @@ export const AdminPackCommandResponseSchema = z.strictObject({
   status: AdminPackStatusSchema,
   revision: z.int().nonnegative(),
   duplicate: z.boolean(),
-  serverTime: z.iso.datetime({ offset: true }),
+  serverTime: UtcServerTimeSchema,
 });
 
 export type CreateBookContextPackRequest = z.infer<typeof CreateBookContextPackRequestSchema>;
 export type CreateBookContextPackResponse = z.infer<typeof CreateBookContextPackResponseSchema>;
+export type AdminBookSelection = z.infer<typeof AdminBookSelectionSchema>;
+export type AdminBookSearchResult = z.infer<typeof AdminBookSearchResultSchema>;
+export type AdminBookSearchResponse = z.infer<typeof AdminBookSearchResponseSchema>;
+export type AdminBookSearchQuery = z.infer<typeof AdminBookSearchQuerySchema>;
 export type AdminBookContextPackSummary = z.infer<typeof AdminBookContextPackSummarySchema>;
 export type AdminBookContextPackListResponse = z.infer<typeof AdminBookContextPackListResponseSchema>;
 export type AdminBookContextPackSnapshot = z.infer<typeof AdminBookContextPackSnapshotSchema>;
 export type UpdateBookContextDraftRequest = z.infer<typeof UpdateBookContextDraftRequestSchema>;
 export type BuilderPackCommandRequest = z.infer<typeof BuilderPackCommandRequestSchema>;
+export type CompleteBookContextReviewRequest = z.infer<typeof CompleteBookContextReviewRequestSchema>;
 export type PublishBookContextPackRequest = z.infer<typeof PublishBookContextPackRequestSchema>;
 export type RetireBookContextPackRequest = z.infer<typeof RetireBookContextPackRequestSchema>;
 export type RetryBookBuilderRunRequest = z.infer<typeof RetryBookBuilderRunRequestSchema>;

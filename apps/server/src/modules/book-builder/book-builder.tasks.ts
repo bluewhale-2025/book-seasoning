@@ -82,5 +82,5 @@ FACT와 AUTHOR_STATEMENT는 확인 가능한 근거만 쓰고 itemSources로 실
 reviewStatus는 모두 UNREVIEWED로 둔다. 원문 장문 인용은 만들지 않는다.
 regeneration.scope가 ITEM이면 targetItemId가 가리키는 항목만 다시 작성하고 itemId는 유지한다. 그 밖의 book, section metadata와 item은 existingDraft와 byte-equivalent한 값과 순서로 보존한다. FULL 또는 INITIAL이면 전체 초안을 구성한다.
 `.trim(),
-  maxOutputTokens: 8_000,
+  maxOutputTokens: 12_000,
 } satisfies AiStructuredTask<BookBuilderDraftV1>;

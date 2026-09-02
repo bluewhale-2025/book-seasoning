@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BuilderPackCommandRequest,
+  CompleteBookContextReviewRequest,
   CreateBookContextPackRequest,
   ProposalCommandRequest,
   PublishBookContextPackRequest,
@@ -18,6 +19,16 @@ export const bookContextPackKey = (packVersionId: string) => ["admin", "book-con
 export function useBookContextPackListQuery() {
   const { bookBuilder } = useAppRuntime();
   return useQuery({ queryKey: bookContextPackListKey, queryFn: () => bookBuilder.listPacks() });
+}
+
+export function useAdminBookSearchQuery(query: string, page = 1, enabled = true) {
+  const { bookBuilder } = useAppRuntime();
+  return useQuery({
+    queryKey: ["admin", "book-context", "book-search", query, page],
+    queryFn: () => bookBuilder.searchBooks(query, page),
+    enabled: enabled && query.trim().length > 0,
+    retry: false,
+  });
 }
 
 export function useBookContextPackQuery(packVersionId: string) {
@@ -66,7 +77,7 @@ export function usePackLifecycleMutation(packVersionId: string) {
   const refresh = useRefreshPack(packVersionId);
   return useMutation({
     mutationFn: (operation:
-      | { kind: "review"; request: BuilderPackCommandRequest }
+      | { kind: "review"; request: CompleteBookContextReviewRequest }
       | { kind: "draft"; request: BuilderPackCommandRequest }
       | { kind: "publish"; request: PublishBookContextPackRequest }
       | { kind: "retire"; request: RetireBookContextPackRequest }) => {

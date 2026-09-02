@@ -72,7 +72,7 @@ Worker
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_TURNSTILE_SITE_KEY` — staging/production의 browser-public Cloudflare widget site key; local은 생략
 
-`SUPABASE_SECRET_KEY`, `WORKER_DATABASE_URL`, `OPENAI_API_KEY`, `COMMAND_FINGERPRINT_KEY`는 절대 Vite 환경, bundle, source map, 로그에 넣지 않는다.
+`SUPABASE_SECRET_KEY`, `WORKER_DATABASE_URL`, `OPENAI_API_KEY`, `KAKAO_REST_API_KEY`, `COMMAND_FINGERPRINT_KEY`는 절대 Vite 환경, bundle, source map, 로그에 넣지 않는다.
 
 ## 3. 공통 adapter 규칙
 
@@ -233,14 +233,15 @@ Admin route와 adapter는 일반 사용자 bundle에서도 role을 추측해 권
 기본 흐름은 다음과 같다.
 
 ```text
-Pack 생성 → 7단계 Builder 진행 → Draft 편집
-  → Review → blocker/warning 확인 → Publish
+외부 도서 검색 → 판본 선택 → Pack 생성 → 7단계 Builder 진행
+  → 전체 내용 연속 편집 → 수정 필요/확인 필요 점검
+  → 전체 검수 완료 → Publish
 
 재생성 → 기존 Draft 유지 → proposal diff
   → apply 또는 discard
 ```
 
-`expectedRevision`은 pack snapshot의 `pack.revision`을 사용한다. `builderRun.status`가 완료되기 전에 Review를 시작하지 않고, warning은 정확한 code 목록을 `acknowledgedWarnings`로 다시 보내야 한다. 상세 화면 의미는 `docs/BOOK_CONTEXT_BUILDER_UX.md`와 `docs/BOOK_CONTEXT_SPEC.md`를 따른다.
+검색 결과의 정규화 metadata를 create body에 복사하지 않고 서버가 발급한 `selectionProof`를 보낸다. `expectedRevision`은 pack snapshot의 `pack.revision`을 사용한다. `builderRun.status`가 완료되기 전에 전체 검수를 완료하지 않고, `수정 필요`가 없어야 하며 `확인 필요`의 정확한 내부 code 목록은 전체 검수 command의 `acknowledgedWarnings`로 보낸다. Publish는 별도 command이며 warning 목록을 다시 보내지 않는다. 상세 화면 의미는 `docs/BOOK_CONTEXT_BUILDER_UX.md`와 `docs/BOOK_CONTEXT_SPEC.md`를 따른다.
 
 ## 5. 화면 권한과 상태
 

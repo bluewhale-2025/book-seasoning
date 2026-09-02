@@ -1,6 +1,8 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import type {
+  AdminBookSearchQuery,
+  CompleteBookContextReviewRequest,
   BuilderPackCommandRequest,
   CreateBookContextPackRequest,
   PublishBookContextPackRequest,
@@ -17,10 +19,19 @@ import { RUNTIME_ENVIRONMENT } from "../../config/runtime-config.module.js";
 import { PublicHttpException } from "../../http/public-http.exception.js";
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import {
+  BOOK_CATALOG_SEARCH_PROVIDER,
+  BookCatalogSearchProviderError,
+  type BookCatalogSearchProvider,
+} from "./book-catalog-search.provider.js";
+import {
   BOOK_BUILDER_ADMIN_GATEWAY,
   BookBuilderAdminGatewayError,
   type BookBuilderAdminGateway,
 } from "./book-builder-admin.gateway.js";
+import {
+  BookSelectionTokenError,
+  BookSelectionTokenService,
+} from "./book-selection-token.service.js";
 
 @Injectable()
 export class BookBuilderAdminService {
@@ -29,15 +40,41 @@ export class BookBuilderAdminService {
     private readonly gateway: BookBuilderAdminGateway,
     @Inject(RUNTIME_ENVIRONMENT)
     private readonly environment: RuntimeEnvironment,
+    @Inject(BOOK_CATALOG_SEARCH_PROVIDER)
+    private readonly bookSearch: BookCatalogSearchProvider,
+    @Inject(BookSelectionTokenService)
+    private readonly selectionTokens: BookSelectionTokenService,
   ) {}
 
+  public searchBooks(actor: AuthenticatedActor, query: AdminBookSearchQuery) {
+    return this.run(async () => {
+      await this.gateway.assertAdmin(actor);
+      const page = await this.bookSearch.search({
+        query: query.q,
+        page: query.page,
+        size: 12,
+      });
+      return {
+        query: query.q,
+        page: page.page,
+        isEnd: page.isEnd,
+        results: page.results.map((book) => ({
+          ...book,
+          selectionProof: this.selectionTokens.issue(book),
+        })),
+      };
+    });
+  }
+
   public create(actor: AuthenticatedActor, request: CreateBookContextPackRequest) {
-    return this.run(() =>
-      this.gateway.create(actor, {
+    return this.run(() => {
+      const selection = this.selectionTokens.verify(request.selectionProof);
+      return this.gateway.create(actor, {
         ...request,
+        selection,
         requestFingerprint: this.fingerprint("CREATE_PACK", request),
-      }),
-    );
+      });
+    });
   }
 
   public list(actor: AuthenticatedActor) {
@@ -67,7 +104,7 @@ export class BookBuilderAdminService {
   public review(
     actor: AuthenticatedActor,
     packVersionId: string,
-    request: BuilderPackCommandRequest,
+    request: CompleteBookContextReviewRequest,
   ) {
     return this.run(() =>
       this.gateway.review(actor, packVersionId, {
@@ -204,6 +241,27 @@ export class BookBuilderAdminService {
     try {
       return await operation();
     } catch (error) {
+      if (error instanceof BookCatalogSearchProviderError) {
+        const status = error.code === "BOOK_SEARCH_RATE_LIMITED"
+          ? HttpStatus.TOO_MANY_REQUESTS
+          : HttpStatus.SERVICE_UNAVAILABLE;
+        throw new PublicHttpException(
+          status,
+          error.code,
+          error.code === "BOOK_SEARCH_RATE_LIMITED"
+            ? "도서 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."
+            : "도서 검색을 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
+        );
+      }
+      if (error instanceof BookSelectionTokenError) {
+        throw new PublicHttpException(
+          HttpStatus.BAD_REQUEST,
+          error.code,
+          error.code === "BOOK_SELECTION_EXPIRED"
+            ? "책 선택 시간이 지났습니다. 다시 검색해주세요."
+            : "선택한 책 정보를 확인할 수 없습니다. 다시 검색해주세요.",
+        );
+      }
       if (!(error instanceof BookBuilderAdminGatewayError)) throw error;
       const errors = {
         admin_required: [
@@ -215,6 +273,11 @@ export class BookBuilderAdminService {
           HttpStatus.NOT_FOUND,
           "BOOK_CONTEXT_PACK_NOT_FOUND",
           "Book Context Pack을 찾을 수 없습니다.",
+        ],
+        book_context_pack_already_exists: [
+          HttpStatus.CONFLICT,
+          "BOOK_CONTEXT_PACK_ALREADY_EXISTS",
+          "이미 이 판본으로 만든 Pack이 있습니다.",
         ],
         book_builder_revision_conflict: [
           HttpStatus.CONFLICT,
@@ -261,10 +324,15 @@ export class BookBuilderAdminService {
           "BOOK_CONTEXT_PUBLISH_BLOCKED",
           "필수 검수 항목을 해결한 뒤 게시할 수 있습니다.",
         ],
+        book_context_review_blocked: [
+          HttpStatus.CONFLICT,
+          "BOOK_CONTEXT_REVIEW_BLOCKED",
+          "수정이 필요한 내용을 해결한 뒤 전체 검수를 완료할 수 있습니다.",
+        ],
         book_context_warnings_unacknowledged: [
           HttpStatus.CONFLICT,
           "BOOK_CONTEXT_WARNINGS_UNACKNOWLEDGED",
-          "게시 경고를 확인해주세요.",
+          "확인이 필요한 내용을 검토해주세요.",
         ],
         command_payload_mismatch: [
           HttpStatus.CONFLICT,

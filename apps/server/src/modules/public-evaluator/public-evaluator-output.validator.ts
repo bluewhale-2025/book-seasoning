@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import {
   PublicContextV1Schema,
+  PublicEvaluatorProviderOutputV1Schema,
   PublicEvaluatorOutputV1Schema,
   collectPublicEvidenceRefs,
   publicEvidenceRefKey,
@@ -17,9 +18,29 @@ import {
   PublicEvidenceResolutionError,
   type PublicEvidenceResolver,
 } from "../ai-context/public-evidence-reference.resolver.js";
+import {
+  canonicalizePublicEvidenceRefs,
+  publicContextEvidenceRefs,
+} from "../ai-context/public-context-evidence.js";
 import type { ClaimedAiJob } from "../ai-jobs/ai-job.queue.js";
 
 type MetricName = keyof DiscussionMetricsV1;
+
+const uniqueStrings = (values: readonly string[]): string[] => [
+  ...new Set(values),
+];
+
+const uniqueBy = <T>(
+  values: readonly T[],
+  key: (value: T) => string,
+): T[] => {
+  const unique = new Map<string, T>();
+  for (const value of values) {
+    const valueKey = key(value);
+    if (!unique.has(valueKey)) unique.set(valueKey, value);
+  }
+  return [...unique.values()];
+};
 
 type MetricReasonCodeMap = Readonly<
   Record<MetricName, Readonly<Record<DiscussionMetricLevel, readonly string[]>>>
@@ -134,16 +155,22 @@ export class PublicEvaluatorOutputValidator {
     rawOutput: unknown,
   ): Promise<PublicEvaluatorOutputV1> {
     this.assertContextAllowed(job, context);
-    const outputResult = PublicEvaluatorOutputV1Schema.safeParse(rawOutput);
-    if (!outputResult.success) this.fail("PUBLIC_EVALUATOR_OUTPUT_INVALID");
-    const output = outputResult.data;
+    const providerOutput = PublicEvaluatorProviderOutputV1Schema.safeParse(rawOutput);
+    if (!providerOutput.success) this.fail("PUBLIC_EVALUATOR_OUTPUT_INVALID");
+    const canonicalOutput = this.normalizeProviderOutput(canonicalizePublicEvidenceRefs(
+      providerOutput.data,
+      context,
+    ), context);
     if (
-      output.packVersionId !== context.session.pinnedPackVersionId ||
-      output.baseWikiVersion !== job.baseWikiVersion ||
-      output.targetThroughSeq !== job.targetThroughSeq
+      canonicalOutput.packVersionId !== context.session.pinnedPackVersionId ||
+      canonicalOutput.baseWikiVersion !== job.baseWikiVersion ||
+      canonicalOutput.targetThroughSeq !== job.targetThroughSeq
     ) {
       this.fail("PUBLIC_EVALUATOR_OUTPUT_ENVELOPE_MISMATCH");
     }
+    const outputResult = PublicEvaluatorOutputV1Schema.safeParse(canonicalOutput);
+    if (!outputResult.success) this.fail("PUBLIC_EVALUATOR_OUTPUT_INVALID");
+    const output = outputResult.data;
 
     this.validateMetricReasons(output.metrics);
     this.validateParticipantScope(context, output);
@@ -162,6 +189,137 @@ export class PublicEvaluatorOutputValidator {
         this.fail("PUBLIC_EVALUATOR_METRIC_REASON_INVALID");
       }
     }
+  }
+
+  private normalizeProviderOutput(
+    output: PublicEvaluatorOutputV1,
+    context: PublicContextV1,
+  ): PublicEvaluatorOutputV1 {
+    const baseTopic = context.baseWiki?.document.currentTopic ?? null;
+    const normalizeTopic = (
+      topic: PublicEvaluatorOutputV1["currentTopic"],
+    ): PublicEvaluatorOutputV1["currentTopic"] => {
+      if (topic === null) return null;
+      if (baseTopic === null || topic.topicId === baseTopic.topicId) {
+        return {
+          ...topic,
+          transitionedFromTopicId: null,
+          changeSummary: null,
+        };
+      }
+      return topic;
+    };
+    const normalizePerspective = (
+      perspective: PublicEvaluatorOutputV1["majorPerspectives"][number],
+    ) => ({
+      ...perspective,
+      relations: uniqueBy(
+        perspective.relations,
+        (relation) => relation.targetPerspectiveId,
+      ).filter(
+        (relation) =>
+          relation.targetPerspectiveId !== perspective.perspectiveId,
+      ),
+    });
+    const normalizeGrounding = (
+      grounding: PublicEvaluatorOutputV1["bookGrounding"][number],
+    ) => ({
+      ...grounding,
+      connectedPerspectiveIds: uniqueStrings(
+        grounding.connectedPerspectiveIds,
+      ),
+    });
+    const normalizeParticipant = (
+      participant: PublicEvaluatorOutputV1["participation"][number],
+    ) =>
+      participant.publiclyExpressedPosition !== null &&
+      participant.evidenceRefs.length === 0
+        ? { ...participant, publiclyExpressedPosition: null }
+        : participant;
+    const currentTopic = normalizeTopic(output.currentTopic);
+    const majorPerspectives = uniqueBy(
+      output.majorPerspectives.map(normalizePerspective),
+      (perspective) => perspective.perspectiveId,
+    );
+    const bookGrounding = uniqueBy(
+      output.bookGrounding.map(normalizeGrounding),
+      (grounding) => grounding.groundingId,
+    );
+    const participation = uniqueBy(
+      output.participation.map(normalizeParticipant),
+      (participant) => participant.participantId,
+    );
+    const operations = output.wikiPatch.operations.map((operation) => {
+      const withCanonicalBase = {
+        ...operation,
+        baseVersion: output.baseWikiVersion,
+      };
+      switch (withCanonicalBase.operation) {
+        case "SET_CURRENT_TOPIC":
+          return {
+            ...withCanonicalBase,
+            topic:
+              currentTopic !== null &&
+              currentTopic.topicId === withCanonicalBase.topic.topicId
+                ? currentTopic
+                : normalizeTopic(withCanonicalBase.topic)!,
+          };
+        case "UPSERT_PERSPECTIVE":
+          return {
+            ...withCanonicalBase,
+            perspective: normalizePerspective(withCanonicalBase.perspective),
+          };
+        case "UPSERT_BOOK_GROUNDING":
+          return {
+            ...withCanonicalBase,
+            grounding: normalizeGrounding(withCanonicalBase.grounding),
+          };
+        case "UPSERT_ISSUE_OR_QUESTION":
+          return {
+            ...withCanonicalBase,
+            issueOrQuestion: {
+              ...withCanonicalBase.issueOrQuestion,
+              relatedPerspectiveIds: uniqueStrings(
+                withCanonicalBase.issueOrQuestion.relatedPerspectiveIds,
+              ),
+            },
+          };
+        case "UPSERT_PUBLIC_PARTICIPANT_STATE":
+          return {
+            ...withCanonicalBase,
+            participantState: normalizeParticipant(
+              withCanonicalBase.participantState,
+            ),
+          };
+        case "SET_METRICS_AND_KEY_CHANGES":
+          return {
+            ...withCanonicalBase,
+            metricsAndKeyChanges: {
+              ...withCanonicalBase.metricsAndKeyChanges,
+              metrics: output.metrics,
+              keyChanges: uniqueBy(
+                withCanonicalBase.metricsAndKeyChanges.keyChanges,
+                (change) => change.changeId,
+              ),
+            },
+          };
+        default:
+          return withCanonicalBase;
+      }
+    });
+    return {
+      ...output,
+      currentTopic,
+      majorPerspectives,
+      bookGrounding,
+      participation,
+      wikiPatch: {
+        ...output.wikiPatch,
+        baseVersion: output.baseWikiVersion,
+        basedThroughSeq: output.targetThroughSeq,
+        operations,
+      },
+    };
   }
 
   private validateParticipantScope(
@@ -241,35 +399,11 @@ export class PublicEvaluatorOutputValidator {
   }
 
   private contextEvidenceKeys(context: PublicContextV1): Set<string> {
-    const references: PublicEvidenceRef[] = [
-      ...collectPublicEvidenceRefs(context.baseWiki),
-      ...collectPublicEvidenceRefs(context.recentPolicyAction),
-      ...context.messages.map((message) =>
-        message.kind === "PARTICIPANT"
-          ? {
-              type: "MESSAGE" as const,
-              messageId: message.messageId,
-              seqNo: message.seqNo,
-            }
-          : {
-              type: "AI_INTERVENTION" as const,
-              messageId: message.messageId,
-              seqNo: message.seqNo,
-            },
+    return new Set(
+      publicContextEvidenceRefs(context).map((reference) =>
+        publicEvidenceRefKey(reference),
       ),
-      ...context.publicPrep.map((prep) => ({
-        type: "PUBLIC_PREP" as const,
-        prepAnswerId: prep.prepAnswerId,
-      })),
-      ...context.bookContext.sections.flatMap((section) =>
-        section.items.map((item) => ({
-          type: "BOOK_CONTEXT_ITEM" as const,
-          packVersionId: context.bookContext.packVersionId,
-          itemId: item.itemId,
-        })),
-      ),
-    ];
-    return new Set(references.map((reference) => publicEvidenceRefKey(reference)));
+    );
   }
 
   private fail(code: string, causeCode: string | null = null): never {

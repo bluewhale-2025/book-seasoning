@@ -94,6 +94,7 @@ GitHub Environment secret에서 배포 시 주입하며 이미지나 파일에 �
 - `SUPABASE_SECRET_KEY`
 - `WORKER_DATABASE_URL`
 - `OPENAI_API_KEY`
+- `KAKAO_REST_API_KEY`
 - `COMMAND_FINGERPRINT_KEY`
 
 `COMMAND_FINGERPRINT_KEY`는 환경마다 별도로 생성하고, 일반 배포 때 재생성하지 않는다. 변경 시 기존 idempotency fingerprint와의 호환 영향을 먼저 검토한다.

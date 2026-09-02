@@ -88,9 +88,8 @@ test("Book Context admin flow reflows and keeps its editor accessible", async ({
 
   await page.goto("/e2e/product.html?route=admin-pack");
   await expect(page.getByRole("heading", { name: "책 정보", exact: true })).toBeVisible();
-  await page.getByLabel("편집할 섹션").selectOption("THEMES");
   await expect(page.getByRole("heading", { name: "주제" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "제목" })).toHaveValue("두 세계");
+  await expect(page.getByRole("textbox", { name: "제목", exact: true })).toHaveValue("두 세계");
 
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,

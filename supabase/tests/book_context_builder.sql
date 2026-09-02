@@ -2,13 +2,28 @@ begin;
 
 set local search_path = public, extensions;
 
-select plan(27);
+select plan(33);
+
+select is(
+  (
+    select count(*)
+    from pg_catalog.pg_proc as procedure
+    join pg_catalog.pg_namespace as namespace
+      on namespace.oid = procedure.pronamespace
+    where namespace.nspname in ('public', 'private')
+      and procedure.prokind = 'f'
+      and procedure.prosrc like '%40001%'
+  ),
+  0::bigint,
+  'application functions do not use retryable serialization SQLSTATE for domain conflicts'
+);
 
 select has_table('private','book_builder_runs','Builder runs are durable');
 select has_table('private','book_builder_jobs','Builder stages are durable jobs');
 select has_table('private','book_builder_proposals','regeneration uses reviewable proposals');
 select has_table('public','book_context_admin_audit','admin mutations are audited');
-select has_function('public','admin_create_book_context_pack',array['uuid','text','text','text'],'admin can create a Pack draft');
+select has_table('private','book_catalog_external_identifiers','selected catalog identities are durable');
+select has_function('public','admin_create_book_context_pack',array['uuid','text','text','text','jsonb'],'admin can create a Pack draft from a selected catalog book');
 select has_function('public','admin_regenerate_book_context_pack',array['uuid','text','uuid','integer','text','uuid'],'admin can request scoped regeneration');
 select ok(
   has_function_privilege('bookseasoning_ai_worker','private.complete_book_builder_stage(uuid,integer,text,jsonb,jsonb)','EXECUTE'),
@@ -27,7 +42,10 @@ update public.profiles set role='ADMIN' where user_id='e7100000-0000-4000-8000-0
 select set_config('request.jwt.claims','{"sub":"e7100000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 set local role authenticated;
 select throws_ok(
-  $$select public.admin_create_book_context_pack('e7200000-0000-4000-8000-000000000001','non-admin','테스트 책','테스트 저자')$$,
+  $$select public.admin_create_book_context_pack(
+    'e7200000-0000-4000-8000-000000000001','non-admin','KAKAO','isbn13:9788990000001',
+    '{"title":"테스트 책","author":"테스트 저자","publisher":"테스트 출판사","publicationYear":2026,"isbn10":null,"isbn13":"9788990000001","coverUrl":null,"translator":null,"description":null,"detailUrl":null}'::jsonb
+  )$$,
   '42501','admin_required','ordinary users cannot access Builder commands'
 );
 reset role;
@@ -37,17 +55,43 @@ set local role authenticated;
 create temporary table builder_test_state as
 select created."packVersionId"::text::uuid as pack_id, (created."run"->>'runId')::uuid as run_id
 from jsonb_to_record(public.admin_create_book_context_pack(
-  'e7200000-0000-4000-8000-000000000002','create-v1','테스트 책','테스트 저자'
+  'e7200000-0000-4000-8000-000000000002','create-v1','KAKAO','isbn13:9788990000001',
+  '{"title":"테스트 책","author":"테스트 저자","publisher":"테스트 출판사","publicationYear":2026,"isbn10":null,"isbn13":"9788990000001","coverUrl":null,"translator":null,"description":"선택한 책 소개","detailUrl":null}'::jsonb
 )) as created("packVersionId" text,"run" jsonb);
 select ok(
-  (public.admin_create_book_context_pack('e7200000-0000-4000-8000-000000000002','create-v1','테스트 책','테스트 저자')->>'duplicate')::boolean,
+  (public.admin_create_book_context_pack(
+    'e7200000-0000-4000-8000-000000000002','create-v1','KAKAO','isbn13:9788990000001',
+    '{"title":"테스트 책","author":"테스트 저자","publisher":"테스트 출판사","publicationYear":2026,"isbn10":null,"isbn13":"9788990000001","coverUrl":null,"translator":null,"description":"선택한 책 소개","detailUrl":null}'::jsonb
+  )->>'duplicate')::boolean,
   'create replay is idempotent'
 );
 select throws_ok(
-  $$select public.admin_create_book_context_pack('e7200000-0000-4000-8000-000000000002','different','다른 책','테스트 저자')$$,
-  '40001','command_payload_mismatch','a command id cannot be reused with another payload'
+  $$select public.admin_create_book_context_pack(
+    'e7200000-0000-4000-8000-000000000002','different','KAKAO','isbn13:9788990000002',
+    '{"title":"다른 책","author":"테스트 저자","publisher":"테스트 출판사","publicationYear":2026,"isbn10":null,"isbn13":"9788990000002","coverUrl":null,"translator":null,"description":null,"detailUrl":null}'::jsonb
+  )$$,
+  'P0001','command_payload_mismatch','a command id cannot be reused with another payload'
 );
 reset role;
+
+select is(
+  (select count(*) from private.book_catalog_external_identifiers where book_id=(select book_id from public.book_context_pack_versions where id=(select pack_id from builder_test_state))),
+  1::bigint,
+  'selected external identity is stored with the book'
+);
+
+select set_config('request.jwt.claims','{"sub":"e7100000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+select is(
+  public.admin_create_book_context_pack(
+    'e7200000-0000-4000-8000-000000000010','existing-selection','KAKAO','isbn13:9788990000001',
+    '{"title":"테스트 책","author":"테스트 저자","publisher":"테스트 출판사","publicationYear":2026,"isbn10":null,"isbn13":"9788990000001","coverUrl":null,"translator":null,"description":"선택한 책 소개","detailUrl":null}'::jsonb
+  )->>'outcome',
+  'EXISTING',
+  'selecting the same edition returns the existing Pack'
+);
+reset role;
+select is((select count(*) from public.book_context_pack_versions where book_id=(select book_id from public.book_context_pack_versions where id=(select pack_id from builder_test_state))),1::bigint,'the same selected edition is not duplicated');
 
 select is((select status from public.book_context_pack_versions where id=(select pack_id from builder_test_state)),'DRAFT','create starts as Draft');
 select is((select count(*) from public.book_context_sections where pack_version_id=(select pack_id from builder_test_state)),7::bigint,'create materializes all seven sections');
@@ -86,7 +130,8 @@ begin
     'sections',(
       select jsonb_agg(
         (section - 'items') || pg_catalog.jsonb_build_object(
-          'coverage','READY','reviewStatus','UNREVIEWED','items',
+          'coverage',case when section->>'code'='STRUCTURE' then 'PARTIAL' else 'READY' end,
+          'reviewStatus','UNREVIEWED','items',
           case when section->>'code'='METADATA' then pg_catalog.jsonb_build_array(
             pg_catalog.jsonb_build_object(
               'itemId','e7300000-0000-4000-8000-000000000001','displayOrder',0,
@@ -111,8 +156,8 @@ $$;
 select is((select status from private.book_builder_runs where id=(select run_id from builder_test_state)),'SUCCEEDED','all seven durable stages complete the run');
 select is((select builder_revision from public.book_context_pack_versions where id=(select pack_id from builder_test_state)),1,'initial Builder output advances the Draft revision once');
 select ok(
-  (private.book_context_validation_json((select pack_id from builder_test_state))->'hardBlockers') ? 'UNREVIEWED_CONTENT',
-  'unreviewed generated content is a Publish hard blocker'
+  not ((private.book_context_validation_json((select pack_id from builder_test_state))->'hardBlockers') ? 'UNREVIEWED_CONTENT'),
+  'generated items do not require individual review state changes'
 );
 
 select set_config('request.jwt.claims','{"sub":"e7100000-0000-4000-8000-000000000001","role":"authenticated"}',true);
@@ -122,22 +167,17 @@ select is(
     'e7200000-0000-4000-8000-000000000003','review-content-v1',(select pack_id from builder_test_state),1,
     jsonb_set(
       public.admin_get_book_context_pack((select pack_id from builder_test_state))->'draft',
-      '{sections}',
-      (select jsonb_agg(jsonb_set(
-        jsonb_set(section,'{reviewStatus}','"REVIEWED"'),'{items}',
-        (select coalesce(jsonb_agg(jsonb_set(item,'{reviewStatus}','"REVIEWED"')),'[]'::jsonb)
-         from jsonb_array_elements(section->'items') item)
-      ) order by (section->>'displayOrder')::integer)
-      from jsonb_array_elements(public.admin_get_book_context_pack((select pack_id from builder_test_state))->'draft'->'sections') section)
+      '{shortDescription}',
+      '"운영자가 전체 내용을 읽고 다듬은 초안"'
     )
   )->>'revision')::integer,
   2,
-  'admin review edits are optimistic and revisioned'
+  'admin edits are optimistic without item-level review controls'
 );
 select is(
   jsonb_array_length(public.admin_get_book_context_pack((select pack_id from builder_test_state))->'validation'->'hardBlockers'),
   0,
-  'a complete reviewed draft clears Publish hard blockers'
+  'a valid whole draft clears review blockers'
 );
 
 create temporary table regeneration_state as
@@ -183,16 +223,22 @@ select is(
   3,
   'an explicit apply command installs the reviewed regeneration proposal'
 );
+select throws_ok(
+  $$select public.admin_review_book_context_pack(
+    'e7200000-0000-4000-8000-000000000008','missing-warning-ack',(select pack_id from builder_test_state),3,'{}'::text[]
+  )$$,
+  '55000','book_context_warnings_unacknowledged','whole review requires the exact current warning set once'
+);
 select is(
   public.admin_review_book_context_pack(
-    'e7200000-0000-4000-8000-000000000006','enter-review-v1',(select pack_id from builder_test_state),3
+    'e7200000-0000-4000-8000-000000000006','enter-review-v1',(select pack_id from builder_test_state),3,array['SECTION_COVERAGE_INCOMPLETE']
   )->>'status',
   'REVIEW',
-  'a successful Builder draft can enter Review'
+  'one explicit command completes review for the whole Pack'
 );
 select is(
   public.admin_publish_book_context_pack(
-    'e7200000-0000-4000-8000-000000000007','publish-v1',(select pack_id from builder_test_state),4,'{}'::text[]
+    'e7200000-0000-4000-8000-000000000007','publish-v1',(select pack_id from builder_test_state),4
   )->>'status',
   'PUBLISHED',
   'reviewed content is explicitly published by an admin'

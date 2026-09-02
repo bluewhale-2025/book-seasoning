@@ -4,6 +4,7 @@ import {
   AiGatewayInvocationError,
   AiGatewayUnavailableError,
 } from "../ai-provider/ai-gateway.js";
+import { publicEvaluatorPromptInput } from "../ai-context/public-context-evidence.js";
 import { AiGenerationService } from "../ai-provider/ai-generation.service.js";
 import { publicEvaluatorTask } from "../ai-provider/ai-task.catalog.js";
 import {
@@ -25,7 +26,7 @@ export class GatewayPublicEvaluator implements PublicEvaluator {
       const result = await this.generation.generate(
         { jobId: input.jobId, attemptNo: input.attemptNo },
         publicEvaluatorTask(input.task),
-        input.context,
+        publicEvaluatorPromptInput(input.context),
       );
       return result.output;
     } catch (error) {

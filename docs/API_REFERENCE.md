@@ -224,11 +224,12 @@ Closing 저장 규칙:
 
 | Method | Path | Request schema | Response schema |
 | --- | --- | --- | --- |
+| GET | `/v1/admin/book-context/books/search?q=&page=` | `AdminBookSearchQuerySchema` | `AdminBookSearchResponseSchema` |
 | POST | `/v1/admin/book-context/packs` | `CreateBookContextPackRequestSchema` | `CreateBookContextPackResponseSchema` |
 | GET | `/v1/admin/book-context/packs` | 없음 | `AdminBookContextPackListResponseSchema` |
 | GET | `/v1/admin/book-context/packs/:packVersionId` | UUID path | `AdminBookContextPackSnapshotSchema` |
 | PUT | `/v1/admin/book-context/packs/:packVersionId/draft` | `UpdateBookContextDraftRequestSchema` | `AdminPackCommandResponseSchema` |
-| POST | `/v1/admin/book-context/packs/:packVersionId/review` | `BuilderPackCommandRequestSchema` | `AdminPackCommandResponseSchema` |
+| POST | `/v1/admin/book-context/packs/:packVersionId/review` | `CompleteBookContextReviewRequestSchema` | `AdminPackCommandResponseSchema` |
 | POST | `/v1/admin/book-context/packs/:packVersionId/return-to-draft` | `BuilderPackCommandRequestSchema` | `AdminPackCommandResponseSchema` |
 | POST | `/v1/admin/book-context/packs/:packVersionId/publish` | `PublishBookContextPackRequestSchema` | `AdminPackCommandResponseSchema` |
 | POST | `/v1/admin/book-context/packs/:packVersionId/retire` | `RetireBookContextPackRequestSchema` | `AdminPackCommandResponseSchema` |
@@ -237,7 +238,9 @@ Closing 저장 규칙:
 | POST | `/v1/admin/book-context/proposals/:proposalId/apply` | `ProposalCommandRequestSchema` | `AdminPackCommandResponseSchema` |
 | POST | `/v1/admin/book-context/proposals/:proposalId/discard` | `ProposalCommandRequestSchema` | `AdminPackCommandResponseSchema` |
 
-초기 create는 title과 author만 받으며 Builder가 판본·출처·claim·section을 채운다. Draft/Review/Publish/Retire 상태 전이는 snapshot revision으로 낙관적 동시성을 제어한다. 재생성은 현재 Draft를 즉시 덮지 않고 `pendingProposal`을 생성한다.
+검색 응답은 Kakao 결과를 provider-neutral selection으로 정규화하고 서버가 서명한 10분 만료 `selectionProof`를 포함한다. 초기 create는 `commandId + selectionProof`만 받으며, 서버가 서명·만료를 검증한 뒤 선택된 판본 identity를 저장하고 Builder를 시작한다. 동일 Provider 외부 ID 또는 ISBN-13의 기존 Pack이 있으면 응답의 `outcome`은 `EXISTING`이고 새 Pack을 만들지 않는다.
+
+Draft/Review/Publish/Retire 상태 전이는 snapshot revision으로 낙관적 동시성을 제어한다. Review request는 `acknowledgedWarnings`의 정확한 현재 집합을 받아 Pack 전체의 검수 완료를 기록한다. Publish request는 warning 확인을 다시 받지 않고 검수한 revision과 현재 revision의 일치만 확인한다. 재생성은 현재 Draft를 즉시 덮지 않고 `pendingProposal`을 생성한다.
 
 ## 8. 안정된 오류 code
 
@@ -296,9 +299,12 @@ Closing 저장 규칙:
 
 | HTTP | Codes |
 | ---: | --- |
+| 400 | `BOOK_SELECTION_INVALID`, `BOOK_SELECTION_EXPIRED` |
 | 403 | `ADMIN_REQUIRED` |
 | 404 | `BOOK_CONTEXT_PACK_NOT_FOUND`, `BOOK_CONTEXT_ITEM_NOT_FOUND` |
-| 409 | `BOOK_BUILDER_REVISION_CONFLICT`, `BOOK_BUILDER_DRAFT_LOCKED`, `BOOK_BUILDER_RUN_INCOMPLETE`, `BOOK_BUILDER_RETRY_UNAVAILABLE`, `BOOK_BUILDER_RETRY_STALE`, `BOOK_BUILDER_PROPOSAL_PENDING`, `BOOK_BUILDER_PROPOSAL_RESOLVED`, `BOOK_CONTEXT_PUBLISH_BLOCKED`, `BOOK_CONTEXT_WARNINGS_UNACKNOWLEDGED`, `COMMAND_PAYLOAD_MISMATCH` |
+| 409 | `BOOK_BUILDER_REVISION_CONFLICT`, `BOOK_BUILDER_DRAFT_LOCKED`, `BOOK_BUILDER_RUN_INCOMPLETE`, `BOOK_BUILDER_RETRY_UNAVAILABLE`, `BOOK_BUILDER_RETRY_STALE`, `BOOK_BUILDER_PROPOSAL_PENDING`, `BOOK_BUILDER_PROPOSAL_RESOLVED`, `BOOK_CONTEXT_REVIEW_BLOCKED`, `BOOK_CONTEXT_PUBLISH_BLOCKED`, `BOOK_CONTEXT_WARNINGS_UNACKNOWLEDGED`, `COMMAND_PAYLOAD_MISMATCH` |
+| 429 | `BOOK_SEARCH_RATE_LIMITED` |
+| 503 | `BOOK_SEARCH_NOT_CONFIGURED`, `BOOK_SEARCH_UNAVAILABLE`, `BOOK_SEARCH_RESPONSE_INVALID` |
 
 ## 9. 변경 규칙
 
