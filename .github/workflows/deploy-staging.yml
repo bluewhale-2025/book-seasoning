@@ -240,6 +240,32 @@ jobs:
           echo "Timed out waiting for Lightsail deployment $DEPLOYMENT_VERSION." >&2
           exit 1
 
+      - name: Diagnose failed Lightsail deployment
+        if: ${{ failure() && steps.deployment.outputs.version != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+
+          echo "Lightsail service state detail:"
+          aws lightsail get-container-services \
+            --region "$AWS_REGION" \
+            --service-name "$LIGHTSAIL_SERVICE_NAME" \
+            --query 'containerServices[0].stateDetail' \
+            --output json
+
+          for container_name in api worker; do
+            echo "::group::Lightsail ${container_name} logs"
+            aws lightsail get-container-log \
+              --region "$AWS_REGION" \
+              --service-name "$LIGHTSAIL_SERVICE_NAME" \
+              --container-name "$container_name" \
+              --filter-pattern "" \
+              --query 'logEvents[-100:].[createdAt,message]' \
+              --output text
+            echo "::endgroup::"
+          done
+
       - name: Check API readiness
         shell: bash
         run: |
