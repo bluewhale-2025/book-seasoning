@@ -42,8 +42,17 @@ if (rootStat?.isDirectory() !== true) {
 }
 
 const files = await collectFiles(artifactRoot);
-if (!files.some((path) => relative(artifactRoot, path) === "index.html")) {
+const indexPath = files.find((path) => relative(artifactRoot, path) === "index.html");
+if (indexPath === undefined) {
   throw new Error("Web artifact is missing index.html");
+}
+
+const indexHtml = await readFile(indexPath, "utf8");
+if (!/^<!doctype html>/i.test(indexHtml)) {
+  throw new Error("Web artifact index.html is missing an HTML doctype");
+}
+if (!/<meta charset=["']UTF-8["']\s*\/?>/i.test(indexHtml)) {
+  throw new Error("Web artifact index.html is missing an early UTF-8 charset declaration");
 }
 
 const violations = [];
