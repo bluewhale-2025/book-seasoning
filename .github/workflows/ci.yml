@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          version: 11.25.0
+          runtime: node@24.18.0
+          cache: true
+          require-lockfile: true
+      - run: pnpm check
+      - run: pnpm check:db
+      - run: docker build --tag bookseasoning:${{ github.sha }} .

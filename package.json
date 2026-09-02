@@ -1,0 +1,45 @@
+{
+  "name": "bookseasoning",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.18.0 <25",
+    "pnpm": ">=11.25.0 <12"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "dev": "pnpm --filter @bookseasoning/web dev",
+    "dev:server": "pnpm --filter @bookseasoning/server dev:api",
+    "dev:worker": "pnpm --filter @bookseasoning/server dev:worker",
+    "eval:ai:live": "pnpm --filter @bookseasoning/server eval:ai:live",
+    "eval:results:live": "pnpm --filter @bookseasoning/server eval:results:live",
+    "eval:builder:live": "pnpm --filter @bookseasoning/server eval:builder:live",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset --local",
+    "test:db": "supabase test db",
+    "test:e2e": "pnpm --filter @bookseasoning/web test:e2e",
+    "load:realtime": "pnpm --filter @bookseasoning/web load:realtime",
+    "release:manifest": "node scripts/create-release-manifest.mjs",
+    "ops:backup": "bash scripts/backup-supabase.sh",
+    "ops:tombstones": "bash scripts/export-restore-tombstones.sh",
+    "ops:restore-drill": "bash scripts/restore-drill.sh",
+    "ops:deploy": "bash scripts/deploy-lightsail.sh",
+    "ops:rollback": "bash scripts/rollback-lightsail.sh",
+    "check:db": "pnpm db:reset && pnpm test:db",
+    "lint": "eslint . --max-warnings=0",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm --filter @bookseasoning/contracts build && pnpm --filter @bookseasoning/domain build && pnpm -r --if-present typecheck",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.9.1",
+    "supabase": "2.116.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  }
+}

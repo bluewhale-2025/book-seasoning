@@ -1,0 +1,189 @@
+@import "tailwindcss";
+@import "@bookseasoning/design-system/tokens.css";
+
+@theme inline {
+  --font-sans: var(--font-ui);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-muted: var(--surface-muted);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-strong: var(--accent-strong);
+  --color-action-primary: var(--action-primary);
+  --color-action-primary-hover: var(--action-primary-hover);
+  --color-action-primary-foreground: var(--action-primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-focus-ring: var(--focus-ring);
+  --color-ai-host-marker: var(--ai-host-marker);
+  --color-ai-host-background: var(--ai-host-background);
+  --color-ai-host-border: var(--ai-host-border);
+  --color-topic-background: var(--topic-background);
+  --color-topic-foreground: var(--topic-foreground);
+  --color-topic-border: var(--topic-border);
+  --color-presence-online: var(--presence-online);
+  --color-warning: var(--warning);
+  --color-warning-background: var(--warning-background);
+  --color-unread: var(--unread);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-ui);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.text-display {
+  font-size: var(--text-display-size);
+  line-height: var(--text-display-line);
+  font-weight: 700;
+  letter-spacing: -0.018em;
+}
+
+.text-page-title {
+  font-size: var(--text-page-title-size);
+  line-height: var(--text-page-title-line);
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.text-section-title {
+  font-size: var(--text-section-title-size);
+  line-height: var(--text-section-title-line);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+}
+
+.text-current-topic {
+  font-size: var(--text-topic-size);
+  line-height: var(--text-topic-line);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+}
+
+.text-body {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.text-chat {
+  font-size: var(--text-chat-size);
+  line-height: var(--text-chat-line);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.text-metadata {
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line);
+  font-weight: 500;
+}
+
+.text-label {
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.text-caption {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: 400;
+}
+
+.animate-message-arrival {
+  animation: message-arrival 160ms var(--ease-standard);
+}
+
+.animate-ai-intervention {
+  animation: ai-intervention 220ms var(--ease-standard);
+}
+
+@keyframes message-arrival {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ai-intervention {
+  from {
+    opacity: 0;
+    background-color: transparent;
+  }
+  to {
+    opacity: 1;
+    background-color: var(--ai-host-background);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">책은양념 앱 아이콘</title>
+  <desc id="desc">노란 바탕 위에 한글 치읓과 양념 한 점을 표현한 아이콘</desc>
+  <rect width="64" height="64" rx="14" fill="#FFC004"/>
+  <circle cx="32" cy="12" r="4.5" fill="#242424"/>
+  <path d="M18 24h28M20 33l12 15 12-15" fill="none" stroke="#242424" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

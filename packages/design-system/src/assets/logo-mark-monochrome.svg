@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">책은양념 단색 로고</title>
+  <desc id="desc">한글 치읓과 양념 한 점을 단색으로 표현한 심볼</desc>
+  <circle cx="32" cy="9" r="5" fill="#242424"/>
+  <path d="M17 21h30M19 31l13 16 13-16" fill="none" stroke="#242424" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

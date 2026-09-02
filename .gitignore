@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.pnpm-store/
+coverage/
+playwright-report/
+test-results/
+.playwright-mcp/
+supabase/.branches/
+supabase/.temp/

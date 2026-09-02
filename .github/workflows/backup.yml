@@ -1,0 +1,75 @@
+name: production-backup
+
+on:
+  schedule:
+    - cron: "23 18 * * *"
+    - cron: "8 * * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Backup reason
+        required: true
+        default: manual
+        type: choice
+        options: [manual, pre-migration]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-backup
+  cancel-in-progress: false
+
+jobs:
+  database:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 18 * * *'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          version: 11.25.0
+          runtime: node@24.18.0
+          cache: true
+          require-lockfile: true
+      - uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - run: pnpm ops:backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          BACKUP_S3_PREFIX: production/database
+          BACKUP_KMS_KEY_ID: ${{ secrets.BACKUP_KMS_KEY_ID }}
+          AWS_REGION: ap-northeast-2
+          BACKUP_REASON: ${{ inputs.reason || 'daily' }}
+
+  tombstones:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '8 * * * *'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          version: 11.25.0
+          runtime: node@24.18.0
+          cache: true
+          require-lockfile: true
+      - uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - run: pnpm ops:tombstones
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          TOMBSTONE_S3_PREFIX: production/restore-tombstones
+          BACKUP_KMS_KEY_ID: ${{ secrets.BACKUP_KMS_KEY_ID }}
+          AWS_REGION: ap-northeast-2

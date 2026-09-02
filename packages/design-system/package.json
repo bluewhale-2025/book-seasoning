@@ -1,0 +1,17 @@
+{
+  "name": "@bookseasoning/design-system",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./src/tokens.css",
+    "./assets/logo-mark.svg": "./src/assets/logo-mark.svg",
+    "./assets/logo-mark-monochrome.svg": "./src/assets/logo-mark-monochrome.svg",
+    "./assets/logo-app-icon.svg": "./src/assets/logo-app-icon.svg",
+    "./assets/logo-horizontal.svg": "./src/assets/logo-horizontal.svg"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  }
+}

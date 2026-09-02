@@ -1,0 +1,29 @@
+{
+  "name": "@bookseasoning/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./public": {
+      "types": "./src/public/index.ts",
+      "import": "./dist/public/index.js"
+    },
+    "./internal": {
+      "types": "./src/internal/index.ts",
+      "import": "./dist/internal/index.js"
+    },
+    "./admin": {
+      "types": "./src/admin/index.ts",
+      "import": "./dist/admin/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "pretest": "pnpm build",
+    "test": "vitest run src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.5.4"
+  }
+}

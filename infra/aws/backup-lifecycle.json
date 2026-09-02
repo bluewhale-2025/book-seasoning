@@ -1,0 +1,18 @@
+{
+  "Rules": [
+    {
+      "ID": "bookseasoning-db-backups-30-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "production/database/" },
+      "Expiration": { "Days": 30 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+    },
+    {
+      "ID": "bookseasoning-restore-tombstones-37-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "production/restore-tombstones/" },
+      "Expiration": { "Days": 37 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 37 }
+    }
+  ]
+}

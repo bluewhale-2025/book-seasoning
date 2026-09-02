@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 64" role="img" aria-labelledby="title desc">
+  <title id="title">책은양념</title>
+  <desc id="desc">치읓 위에 노란 한 점이 놓인 심볼과 책은양념 워드마크</desc>
+  <circle cx="32" cy="9" r="5" fill="#FFC004"/>
+  <path d="M17 21h30M19 31l13 16 13-16" fill="none" stroke="#242424" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="75" y="42" fill="#242424" font-family="'Pretendard Variable', Pretendard, 'Noto Sans KR', sans-serif" font-size="28" font-weight="700" letter-spacing="-1.4">책은양념</text>
+</svg>

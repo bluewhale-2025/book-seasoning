@@ -1,0 +1,104 @@
+:root {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --foreground: #242424;
+  --surface: #f7f7f7;
+  --surface-elevated: #ffffff;
+  --surface-muted: #f2f2f2;
+  --muted: #f2f2f2;
+  --muted-foreground: #6e6e6e;
+  --border: #ececec;
+  --border-strong: #c1c1c1;
+  --accent: #ffc004;
+  --accent-hover: #f2b600;
+  --accent-foreground: #242424;
+  --accent-subtle: #fff7d6;
+  --accent-strong: #755900;
+  --action-primary: #242424;
+  --action-primary-hover: #000000;
+  --action-primary-foreground: #ffffff;
+  --destructive: #d04444;
+  --destructive-hover: #bd3434;
+  --destructive-foreground: #ffffff;
+  --focus-ring: #242424;
+
+  --ai-host-marker: #242424;
+  --ai-host-background: #f7f7f7;
+  --ai-host-border: #ececec;
+  --topic-background: #fff7d6;
+  --topic-foreground: #242424;
+  --topic-border: #f0d76c;
+  --presence-online: #2b8a5a;
+  --warning: #8a5c00;
+  --warning-background: #fff4cc;
+  --unread: #ffc004;
+
+  --font-ui: "Pretendard Variable", Pretendard, -apple-system,
+    BlinkMacSystemFont, system-ui, "Segoe UI", "Noto Sans KR", sans-serif;
+
+  --text-display-size: 2.25rem;
+  --text-display-line: 2.75rem;
+  --text-page-title-size: 1.5rem;
+  --text-page-title-line: 2.125rem;
+  --text-section-title-size: 1.125rem;
+  --text-section-title-line: 1.625rem;
+  --text-topic-size: 1.125rem;
+  --text-topic-line: 1.8125rem;
+  --text-body-size: 1rem;
+  --text-body-line: 1.6875rem;
+  --text-chat-size: 1rem;
+  --text-chat-line: 1.75rem;
+  --text-meta-size: 0.8125rem;
+  --text-meta-line: 1.1875rem;
+  --text-label-size: 0.8125rem;
+  --text-label-line: 1.125rem;
+  --text-caption-size: 0.75rem;
+  --text-caption-line: 1.125rem;
+
+  --space-0: 0;
+  --space-0-5: 0.125rem;
+  --space-1: 0.25rem;
+  --space-1-5: 0.375rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+
+  --border-width: 1px;
+  --border-width-emphasis: 2px;
+  --shadow-low: 0 4px 16px rgb(0 0 0 / 0.08);
+  --shadow-medium: 0 16px 40px rgb(0 0 0 / 0.14);
+
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
+  --motion-deliberate: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --layout-shell-max: 65rem;
+  --layout-conversation-max: 45rem;
+  --layout-ai-max: 40rem;
+  --layout-header-height: 3.5rem;
+  --layout-book-context-height: 4.5rem;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --text-display-size: 1.75rem;
+    --text-display-line: 2.25rem;
+    --layout-header-height: 3.25rem;
+    --layout-book-context-height: 3.5rem;
+  }
+}

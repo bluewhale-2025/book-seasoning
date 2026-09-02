@@ -1,0 +1,22 @@
+{
+  "name": "@bookseasoning/domain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./privacy": {
+      "types": "./src/privacy/index.ts",
+      "import": "./dist/privacy/index.js"
+    },
+    "./session-machine": {
+      "types": "./src/session-machine/index.ts",
+      "import": "./dist/session-machine/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "pretest": "pnpm build",
+    "test": "vitest run src",
+    "typecheck": "tsc --noEmit"
+  }
+}
