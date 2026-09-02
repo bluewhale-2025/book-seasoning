@@ -20,16 +20,16 @@ const production: RuntimeEnvironment = {
 describe("HealthReadinessService", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("reports ready when the Supabase REST dependency responds", async () => {
+  it("reports ready when the Supabase API health endpoint responds", async () => {
     const fetcher = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetcher);
     const service = new HealthReadinessService(production);
 
     await expect(service.check()).resolves.toBe(true);
     expect(fetcher).toHaveBeenCalledWith(
-      new URL("https://project.supabase.co/rest/v1/"),
+      new URL("https://project.supabase.co/auth/v1/health"),
       expect.objectContaining({
-        method: "HEAD",
+        method: "GET",
         headers: { apikey: "sb_publishable_test" },
       }),
     );

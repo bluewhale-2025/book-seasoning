@@ -31,10 +31,10 @@ export class HealthReadinessService {
       return this.environment.nodeEnv !== "production";
     }
     try {
-      const endpoint = new URL("/rest/v1/", supabaseUrl);
+      const endpoint = new URL("/auth/v1/health", supabaseUrl);
       const response = await fetch(endpoint, {
         headers: { apikey: supabasePublishableKey },
-        method: "HEAD",
+        method: "GET",
         signal: AbortSignal.timeout(READINESS_TIMEOUT_MS),
       });
       return response.ok;
