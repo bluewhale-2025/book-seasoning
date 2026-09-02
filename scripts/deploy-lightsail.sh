@@ -79,5 +79,25 @@ aws lightsail create-container-service-deployment \
   --service-name "$LIGHTSAIL_SERVICE_NAME" \
   --cli-input-json "file://${deployment_path}" \
   --region "$AWS_REGION" \
-  --query 'containerService.currentDeployment.version' \
-  --output text
+  >/dev/null
+
+for attempt in $(seq 1 12); do
+  deployment_version="$(
+    aws lightsail get-container-service-deployments \
+      --service-name "$LIGHTSAIL_SERVICE_NAME" \
+      --region "$AWS_REGION" \
+      --output json \
+      | jq -r --arg release "$RELEASE_VERSION" \
+          '[.deployments[] | select(.containers.api.environment.RELEASE_VERSION == $release) | .version] | max // empty'
+  )"
+
+  if [[ -n "$deployment_version" ]]; then
+    printf '%s\n' "$deployment_version"
+    exit 0
+  fi
+
+  sleep 5
+done
+
+printf 'Could not resolve the created Lightsail deployment version.\n' >&2
+exit 1
