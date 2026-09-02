@@ -284,6 +284,8 @@ jobs:
             exit 1
           fi
 
+          service_url="${service_url%/}"
+
           curl --fail --silent --show-error \
             --retry 12 \
             --retry-delay 5 \
