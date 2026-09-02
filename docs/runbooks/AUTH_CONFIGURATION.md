@@ -45,8 +45,7 @@ pnpm check:db
    제한한다. Production에 preview wildcard를 넣지 않는다.
 4. asymmetric JWT signing key를 current 상태로 승격하고 JWKS에 공개키가
    노출되는지 확인한다.
-5. Cloudflare Turnstile managed challenge를 가입과 reset 흐름에 적용한다.
-   로그인 challenge는 abuse가 확인될 때 활성화한다.
+5. Supabase Auth 전역 Cloudflare Turnstile managed challenge를 가입·로그인·reset 흐름에 적용한다.
 6. Supabase Auth rate limit을 staging에서 검증한 뒤 production에 적용한다.
 7. Production은 Resend custom SMTP를 사용한다. 인증 전용 sending
    subdomain에 SPF, DKIM, DMARC를 설정하고 open/click tracking을 끈다.

@@ -318,7 +318,11 @@ const auth: AuthApi = {
 
 const runtime: AppRuntime = {
   account: {
-    getDeletionPreview: async () => ({
+    getDeletionPreview: async () => route === "profile-blocked" ? ({
+      allowed: false,
+      blockers: ["ACTIVE_PARTICIPATION", "HOSTED_ROOM_REQUIRES_TRANSFER_OR_CANCEL"],
+      affected: { messages: 18, publicPrep: 2, privatePrep: 1, closingResponses: 1 },
+    }) : ({
       allowed: true,
       blockers: [],
       affected: { messages: 18, publicPrep: 2, privatePrep: 1, closingResponses: 1 },
@@ -477,7 +481,7 @@ const initialEntry = route === "find"
           ? "/admin/book-context"
           : route === "admin-pack"
             ? `/admin/book-context/${adminSnapshot.pack.packVersionId}`
-            : route === "profile"
+            : route === "profile" || route === "profile-blocked"
               ? "/profile"
         : "/discussions";
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

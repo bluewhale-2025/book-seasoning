@@ -29,14 +29,14 @@
 
 | 영역 | 서버 | 현재 web | 프론트 작업 |
 | --- | --- | --- | --- |
-| Auth | Supabase email/password, profile 생성 trigger | Auth adapter/provider, 가입·로그인·PKCE reset route, 보호 route guard 구현 | staging/production Turnstile widget과 E2E |
-| 프로필 | 조회·수정 API 완료 | profile query/mutation과 축약 설정 화면 구현 | 계정 탈퇴 flow 연결 시 account 상태와 통합 |
+| Auth | Supabase email/password, profile 생성 trigger | Auth adapter/provider, 가입·로그인·PKCE reset route, 보호 route guard와 세 flow의 Managed Turnstile 연결 완료 | staging Turnstile·reset mail E2E |
+| 프로필 | 조회·수정 API 완료 | profile query/mutation, 축약 설정과 계정 탈퇴 UX 구현 | staging 계정 탈퇴 smoke |
 | 책 catalog | Published Pack 검색 API 완료 | catalog query·검색·exact Pack 선택 화면 구현 | 실제 local API smoke |
 | 방·대기실 | 생성·검색·참가·설정·멤버·사전 입력 API 완료 | room/prep adapter, 제품 route, snapshot 기반 대기실 구현 | 실제 local API·heartbeat smoke |
 | 실시간 토론 | snapshot·message·heartbeat·운영 command·Realtime 완료 | API/Realtime adapter, projection, route 구현 | 기존 구현을 기준으로 확장 |
 | Closing·결과 | 마지막 한 줄·공식 기록 API와 event 완료 | closing/result adapter, 마지막 한 줄, 공식 기록·대화·prep 읽기 화면 구현 | 실제 local API·Worker result smoke |
-| 계정 탈퇴 | preview·삭제 API와 복구 worker 완료 | 미연결 | 확인 단계·blocker·로그아웃 처리 |
-| Admin Builder | 7단계 Builder와 Draft/Review/Publish API 완료 | 미연결 | Admin 전용 adapter와 Builder UX |
+| 계정 탈퇴 | preview·삭제 API와 복구 worker 완료 | 전체 탈퇴 UX, 실제 local Auth hard-delete·재가입과 DB prepare 이후 Worker 장애 복구 smoke 완료 | staging 계정 탈퇴 smoke |
+| Admin Builder | 7단계 Builder와 Draft/Review/Publish API 완료 | Admin 전용 adapter, 7단계 진행·검수·proposal diff·Publish Gate 구현 | 실제 staging Builder smoke |
 
 현재 실시간 구현의 기준 파일은 다음과 같다.
 
@@ -70,6 +70,7 @@ Worker
 - `VITE_API_BASE_URL`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_TURNSTILE_SITE_KEY` — staging/production의 browser-public Cloudflare widget site key; local은 생략
 
 `SUPABASE_SECRET_KEY`, `WORKER_DATABASE_URL`, `OPENAI_API_KEY`, `COMMAND_FINGERPRINT_KEY`는 절대 Vite 환경, bundle, source map, 로그에 넣지 않는다.
 
@@ -149,7 +150,7 @@ Auth는 Nest API가 아니라 Supabase Auth browser client를 직접 사용한�
 - reset callback: PKCE session 교환 후 `updateUser({ password })`
 - 로그아웃: Supabase session을 폐기한 뒤 authenticated query cache를 제거한다.
 
-가입 metadata의 key는 정확히 `profile_name`이다. Local은 email confirmation과 CAPTCHA가 꺼져 있고, staging/production 가입·reset에는 Turnstile token을 전달한다. 자세한 환경 규칙은 `docs/runbooks/AUTH_CONFIGURATION.md`를 따른다.
+가입 metadata의 key는 정확히 `profile_name`이다. Local은 email confirmation과 CAPTCHA가 꺼져 있고, staging/production 가입·로그인·reset에는 Turnstile token을 전달한다. 자세한 환경 규칙은 `docs/runbooks/AUTH_CONFIGURATION.md`를 따른다.
 
 ### 4.2 프로필
 

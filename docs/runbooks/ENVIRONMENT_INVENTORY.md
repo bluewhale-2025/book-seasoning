@@ -70,6 +70,7 @@ TLS 인증서가 활성화되고 HTTPS 응답을 확인하기 전에는 프론�
 | API base URL | `https://api-staging.book-seasoning.com` | `https://api.book-seasoning.com` |
 | API `CORS_ORIGINS` | `https://staging.book-seasoning.com` | `https://book-seasoning.com` |
 | Web `VITE_API_BASE_URL` | `https://api-staging.book-seasoning.com` | `https://api.book-seasoning.com` |
+| Web `VITE_TURNSTILE_SITE_KEY` | staging widget의 공개 site key | production widget의 공개 site key |
 | Auth Site URL | `https://staging.book-seasoning.com` | `https://book-seasoning.com` |
 | Password reset redirect | `https://staging.book-seasoning.com/auth/reset` | `https://book-seasoning.com/auth/reset` |
 
@@ -84,6 +85,7 @@ Amplify branch 환경 변수로 관리한다.
 - `VITE_API_BASE_URL`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_TURNSTILE_SITE_KEY`
 
 ### Lightsail runtime secret
 
@@ -110,6 +112,7 @@ GitHub Environment secret에서 배포 시 주입하며 이미지나 파일에 �
 - 환경별 migration용 `SUPABASE_DB_URL`
 - production backup용 `SUPABASE_BACKUP_DB_URL`
 - staging·production 배포용 AWS OIDC role ARN
+- staging Amplify app ID
 - backup용 AWS OIDC role ARN, S3 bucket, KMS key ARN
 
 AWS 인증은 GitHub OIDC를 사용하고 장기 Access Key를 GitHub나 container에 저장하지 않는다.
@@ -148,8 +151,12 @@ AWS 인증은 GitHub OIDC를 사용하고 장기 Access Key를 GitHub나 contain
 - [ ] OpenAI staging project/key 소유자 확인
 - [x] Resend 계정과 인증 발신 도메인 `auth.book-seasoning.com` 검증
 - [x] 인증 발신 주소를 `no-reply@auth.book-seasoning.com`으로 확정
-- [ ] Resend와 Supabase staging custom SMTP 연결·reset mail smoke
-- [ ] Cloudflare 계정과 Turnstile site 소유자 확인
+- [x] Resend와 Supabase staging custom SMTP 연결
+- [ ] staging HTTPS reset callback 연결 후 reset mail smoke
+- [x] Cloudflare 계정과 staging Turnstile widget `bookseasoning-staging-auth` 생성
+- [ ] Turnstile site 소유자 기록과 signup/login/reset 전역 적용 E2E
+- [x] Amplify build/header 설정과 GitHub staging release gate 준비
+- [x] Amplify staging app·branch 생성, auto-build 비활성화, `AMPLIFY_APP_ID` 등록과 SPA rewrite 직접 진입 확인
 - [ ] Sentry 도입 여부 확정
 - [ ] GA4 초기 도입 여부 확정
 

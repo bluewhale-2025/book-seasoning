@@ -645,7 +645,7 @@ password 통과 후 바로 composer로 보내지 않고 다음 context를 확인
 - 공백 이름은 field error로 처리한다.
 - 중복 이메일은 `이미 사용 중인 이메일입니다`를 이메일 field에 연결한다.
 - 가입 성공 시 이메일 확인 대기 화면 없이 로그인 상태가 되고 `내 토론`으로 이동한다.
-- Turnstile managed challenge가 사용자 입력을 요구할 때만 submit 인접 영역에 나타난다.
+- 가입·로그인·재설정의 Turnstile managed challenge가 사용자 입력을 요구할 때만 submit 인접 영역에 나타난다.
 
 ### 12.4 비밀번호 재설정 요청
 

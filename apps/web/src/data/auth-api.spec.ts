@@ -58,6 +58,47 @@ describe("SupabaseAuthApi", () => {
     );
   });
 
+  it("passes the CAPTCHA token when signing in", async () => {
+    const signInWithPassword = vi.fn().mockResolvedValue({
+      data: {
+        user: {
+          id: "90000000-0000-4000-8000-000000000001",
+          email: "reader@example.com",
+        },
+      },
+      error: null,
+    });
+    const api = new SupabaseAuthApi(supabaseWith({ signInWithPassword }));
+
+    await api.signIn("reader@example.com", "secret-password", "challenge-token");
+
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: "reader@example.com",
+      password: "secret-password",
+      options: { captchaToken: "challenge-token" },
+    });
+  });
+
+  it("maps provider CAPTCHA failures to a stable client code", async () => {
+    const api = new SupabaseAuthApi(
+      supabaseWith({
+        signUp: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: { code: "captcha_failed", message: "provider-specific text" },
+        }),
+      }),
+    );
+
+    await expect(api.signUp({
+      email: "reader@example.com",
+      password: "secret-password",
+      profileName: "독서가",
+      captchaToken: "expired-token",
+    })).rejects.toEqual(
+      expect.objectContaining<Partial<AuthClientError>>({ code: "CAPTCHA_FAILED" }),
+    );
+  });
+
   it("passes the exact reset callback without exposing provider response text", async () => {
     const resetPasswordForEmail = vi.fn().mockResolvedValue({ data: {}, error: null });
     const api = new SupabaseAuthApi(supabaseWith({ resetPasswordForEmail }));

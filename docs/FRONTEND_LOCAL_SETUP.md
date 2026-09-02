@@ -105,6 +105,7 @@ cp apps/web/.env.example apps/web/.env.local
 VITE_API_BASE_URL=http://localhost:3000
 VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_PUBLISHABLE_KEY=<같은 local publishable key>
+# local Supabase CAPTCHA는 꺼져 있으므로 VITE_TURNSTILE_SITE_KEY는 생략
 ```
 
 `SUPABASE_SECRET_KEY`, DB URL, OpenAI key를 `VITE_` 변수로 만들지 않는다. Vite의 `VITE_` 값은 모두 browser bundle에서 읽을 수 있다.
@@ -275,6 +276,22 @@ Admin으로 Pack을 생성하면 Worker가 7단계 Builder를 처리한다. 실�
 3. 허용 계정 삭제 성공 후 local cache와 Auth session 제거
 4. 공동 메시지는 `탈퇴한 사용자`로 남고 AI_PRIVATE은 삭제
 5. 같은 email 재가입은 새 계정이며 과거 참여와 연결되지 않음
+
+API와 Worker가 실행 중이면 Auth hard-delete와 재가입 경계는 다음 local-only smoke로 반복 검증한다.
+
+```bash
+pnpm smoke:account-deletion
+```
+
+이 명령은 `localhost` 또는 `127.0.0.1` 외의 서비스와 production mode에서는 실행을 거부한다. 매번 고유한 임시 계정을 만들고 `가입 → 프로필 contract parse → preview → 잘못된 비밀번호 거절 → 실제 삭제 → 재로그인 불가 → 같은 email의 새 UUID 재가입`을 검증한 뒤 재가입 계정도 삭제한다. 실패 중 남은 임시 Auth user는 server-only local secret client로 정리한다.
+
+API가 DB 준비 직후 중단된 장애 경계와 Worker 복구는 별도 local-only smoke로 확인한다. 이 명령은 API process 없이 실행하며, 임시 계정의 삭제 준비를 실제 DB에 commit한 뒤 처리 lease만 만료시켜 Worker recovery service가 Auth hard-delete와 완료 기록을 수행하는지 검증한다.
+
+```bash
+pnpm smoke:account-deletion-recovery
+```
+
+Supabase local container가 실행 중이고 root `.env`에 local `SUPABASE_*`, `WORKER_DATABASE_URL`, `COMMAND_FINGERPRINT_KEY`가 있어야 한다. smoke는 non-local URL과 production mode를 거부하고, 검증 뒤 임시 Auth user와 삭제 요청을 정리한다.
 
 ## 8. 자주 발생하는 문제
 

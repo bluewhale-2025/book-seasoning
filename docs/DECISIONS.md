@@ -938,6 +938,7 @@ coarse marketing funnel과 session/domain/AI 관계 분석은 필요한 식별 �
 ## [TECH-016] Supabase Auth custom SMTP와 Resend 기반 password reset
 
 - Date: 2026-09-01
+- Amended: 2026-09-02 — Supabase 전역 CAPTCHA 제약에 맞춰 Managed Turnstile을 로그인에도 적용
 - Status: ACCEPTED
 - Owner: Product owner / Engineering
 - Related:
@@ -959,7 +960,7 @@ MVP는 이메일 확인을 요구하지 않지만 이메일을 통한 비밀번�
 - reset 요청은 이메일 존재 여부와 무관하게 같은 사용자-facing 응답을 반환하고 redirect allow-list는 local/staging/production의 정확한 URL로 제한한다.
 - local은 Supabase Mailpit, staging과 production은 별도 Resend credential/domain 또는 환경으로 분리한다.
 - recipient email, reset token과 link는 application log, Sentry와 analytics에 기록하지 않는다.
-- provider·Supabase rate limit을 설정하고 회원가입과 password reset에 Cloudflare Turnstile managed challenge를 적용한다. 로그인 CAPTCHA는 abuse가 관찰될 때 추가한다.
+- provider·Supabase rate limit을 설정하고 회원가입·로그인·password reset에 Cloudflare Turnstile managed challenge를 공통 적용한다.
 - production 활성화 전 이메일 주소의 국외 처리위탁/보관, provider 보유 기간과 삭제·계약 조건을 privacy 문서에서 검토한다.
 
 ### Alternatives
@@ -996,6 +997,7 @@ Resend는 Supabase custom SMTP에 직접 연결할 수 있어 password reset만 
 ## [TECH-017] SPA token, API perimeter와 방 password abuse 방어
 
 - Date: 2026-09-01
+- Amended: 2026-09-02 — 가입·로그인·reset에 전역 Managed Turnstile 적용
 - Status: ACCEPTED
 - Owner: Product owner / Engineering
 - Related:
@@ -1015,7 +1017,7 @@ browser가 Supabase Auth·RLS·Realtime에 직접 접속하는 SPA 구조에서�
 - production은 HTTPS/HSTS, `@fastify/helmet`, exact-origin CORS, request body 한도와 Zod 길이·형식 제한을 적용한다. bearer auth에서 CSRF보다 XSS를 주요 browser 위험으로 취급한다.
 - Amplify 보안 header에 strict CSP를 설정해 자체 origin, Nest API, 필요한 Supabase endpoint와 검증된 Sentry·GA endpoint만 허용한다. `object-src 'none'`, `frame-ancestors 'none'`, 제한된 `base-uri`를 기본으로 하고 `unsafe-eval`은 허용하지 않는다.
 - 메시지·prep·reflection 등 user-generated text는 HTML/Markdown으로 실행하지 않고 plaintext로 rendering한다. MVP에서 rich text와 자동 linkify를 추가하지 않는다.
-- 회원가입과 password reset은 Cloudflare Turnstile managed challenge와 Supabase Auth rate limit을 함께 사용한다. 로그인은 초기에 CAPTCHA를 두지 않고 공격 징후가 있을 때 추가한다.
+- 회원가입·로그인·password reset은 Cloudflare Turnstile managed challenge와 Supabase Auth rate limit을 함께 사용한다.
 - 방 password는 unique salt를 사용한 Argon2id PHC string으로만 저장한다. 초기 parameter는 `m=19 MiB, t=2, p=1`이며 Lightsail에서 벤치마크해 서버 부하와 검증 지연을 조정한다.
 - MVP에서 password pepper는 사용하지 않는다. 방 password 변경은 hash와 `password_version`을 같이 갱신하고 기존 등록자는 password 재입력 없이 재진입한다.
 - 방 password 실패는 우선 방·actor별 1분 5회, 1시간 20회로 제한하되 방 전체를 잠그지 않는다. 값은 배포 없이 조정 가능한 configuration으로 관리한다.
@@ -1030,7 +1032,7 @@ browser가 Supabase Auth·RLS·Realtime에 직접 접속하는 SPA 구조에서�
 1. HttpOnly cookie BFF를 추가하고 browser의 Supabase 직접 접속을 제거
 2. 방 password를 bcrypt 또는 빠른 hash로 저장
 3. 방 전체 lockout 또는 application memory rate limit만 사용
-4. Redis, edge WAF와 전 flow CAPTCHA를 첫 배포부터 운영
+4. 선택 적용을 위한 별도 Auth proxy와 Turnstile server verification을 운영
 5. Argon2id에 application pepper를 추가
 
 ### Rationale
@@ -1040,14 +1042,14 @@ Supabase direct Auth/RLS/Realtime 구조를 유지하면서 token의 불필요�
 ### Trade-offs
 
 - SPA token은 JavaScript runtime에 존재하므로 CSP와 XSS 방어가 계속 중요하다.
-- Turnstile은 가입·reset에 작은 마찰과 외부 provider 의존성을 추가한다.
+- Turnstile은 인증 form에 작은 마찰과 외부 provider 의존성을 추가한다.
 - Argon2id는 빠른 hash보다 API memory·CPU를 더 사용한다.
 - Postgres limiter는 실패 시도마다 DB write를 추가한다.
 
 ### Consequences
 
 - security header/CSP, JWT verifier, public/private key 환경 검증을 Slice 0에 포함한다.
-- Turnstile·Auth rate limit·reset generic response를 Slice 1의 E2E 기준에 포함한다.
+- 가입·로그인·reset Turnstile, Auth rate limit과 reset generic response를 Slice 1의 E2E 기준에 포함한다.
 - Argon2 hash, password version을 포함한 atomic join command와 durable limiter를 Slice 2에 구현한다.
 - Slice 2 API는 local limiter → durable limiter → Argon2 verify → short-lived authorization → room lock/capacity/membership commit 순서를 사용한다.
 - password 실패 통계는 GA/product analytics가 아니라 민감한 security telemetry로 분리한다.
@@ -1055,7 +1057,7 @@ Supabase direct Auth/RLS/Realtime 구조를 유지하면서 token의 불필요�
 ### Revisit Trigger
 
 - 다중 API instance 트래픽이 Postgres limiter 부하를 만들어 Redis 또는 edge limiter가 필요할 때
-- 분산 brute-force·DDoS가 관찰돼 WAF와 로그인 CAPTCHA가 필요할 때
+- 분산 brute-force·DDoS가 관찰돼 별도 WAF나 강화된 challenge가 필요할 때
 - rich text, HTML 또는 user link preview가 제품 요구로 확정될 때
 - Supabase 직접 Auth/RLS/Realtime 접속을 제거해 cookie BFF가 더 단순해질 때
 
@@ -3379,6 +3381,43 @@ Supabase Auth hard delete는 DB 익명화 transaction과 하나의 원자 transa
 - 법적 검토가 더 짧은 backup/tombstone 보관이나 공동 본문 삭제를 요구할 때
 - Auth provider가 transactional deletion hook이나 workload identity 기반 외부 tombstone 저장을 제공할 때
 - 삭제 backlog나 recovery attempt가 운영 기준을 반복해서 넘을 때
+
+## [PRODUCT-032] 인증 전 흐름에 Managed Turnstile 적용
+
+- Date: 2026-09-02
+- Status: ACCEPTED
+- Owner: Product owner
+- Related:
+  - `PRODUCT_SPEC.md` §3.1
+  - `TECH-016`, `TECH-017`
+
+### Context
+
+기존 기준은 회원가입과 비밀번호 재설정에만 Turnstile을 적용하고 로그인은 abuse가 관찰될 때 추가하는 것이었다. Hosted Supabase Auth의 CAPTCHA 보호는 인증 endpoint별 선택이 아니라 가입·로그인·비밀번호 재설정에 전역 적용된다. 선택 적용을 유지하려면 별도 Auth proxy와 server-side Turnstile 검증 경계를 추가해야 한다.
+
+### Decision
+
+- staging과 production의 회원가입·로그인·비밀번호 재설정 요청에 Cloudflare Managed Turnstile을 공통 적용한다.
+- 정상 요청은 가능한 한 자동 통과시키고 Cloudflare가 추가 확인을 요구할 때만 form 안에서 상호작용을 요청한다.
+- deterministic local 개발에서는 Turnstile site key와 Supabase CAPTCHA를 비활성화할 수 있다.
+- 브라우저에는 site key만 두고 secret key는 Supabase Auth 설정에만 저장한다.
+
+### Rationale
+
+Supabase가 제공하는 검증 경계를 그대로 사용하면 별도 인증 프록시, password 전달 경로와 부분 실패 상태를 만들지 않고도 세 인증 endpoint를 같은 방식으로 보호할 수 있다. Managed mode는 정상 사용자의 상호작용을 최소화하면서 이메일 인증을 생략한 MVP의 자동화 abuse를 줄인다.
+
+### Consequences
+
+- 가입·로그인·재설정 form은 Turnstile token이 준비된 뒤 submit한다.
+- 실패하거나 만료된 token은 재사용하지 않고 widget을 reset한다.
+- CSP는 Cloudflare challenge script·frame·connect endpoint를 허용한다.
+- staging CAPTCHA 활성화는 해당 site key가 포함된 web artifact가 배포된 뒤 수행한다.
+
+### Revisit Trigger
+
+- 정상 사용자의 인증 실패나 추가 상호작용 비율이 제품 사용성을 유의미하게 해칠 때
+- Supabase가 인증 endpoint별 CAPTCHA 설정을 제공할 때
+- 자체 Auth proxy 또는 edge WAF를 도입해 선택 적용이 더 단순해질 때
 
 # Experiment Values
 

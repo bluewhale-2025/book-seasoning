@@ -8,6 +8,10 @@ import { BrandLogo } from "../../components/ui/brand-logo";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { AuthClientError } from "../../data/auth-api";
+import {
+  TurnstileChallenge,
+  type TurnstileChallengeHandle,
+} from "./turnstile-challenge";
 
 function AuthPage({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -55,21 +59,37 @@ export function LoginPage() {
   const location = useLocation();
   const [error, setError] = React.useState<string>();
   const [submitting, setSubmitting] = React.useState(false);
+  const [captchaToken, setCaptchaToken] = React.useState<string>();
+  const captchaRef = React.useRef<TurnstileChallengeHandle>(null);
+  const captchaRequired = Boolean(auth.turnstileSiteKey);
   const accountDeleted = new URLSearchParams(location.search).get("deleted") === "1";
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
+    if (captchaRequired && !captchaToken) {
+      setError("보안 확인을 완료해 주세요.");
+      return;
+    }
     setSubmitting(true);
     const data = new FormData(event.currentTarget);
     try {
-      await auth.signIn(String(data.get("email")), String(data.get("password")));
+      await auth.signIn(
+        String(data.get("email")),
+        String(data.get("password")),
+        captchaToken,
+      );
       const from = (location.state as { from?: unknown } | null)?.from;
       navigate(typeof from === "string" && from.startsWith("/") ? from : "/discussions", {
         replace: true,
       });
-    } catch {
-      setError("이메일 또는 비밀번호를 확인해 주세요.");
+    } catch (caught) {
+      setError(
+        caught instanceof AuthClientError && caught.code === "CAPTCHA_FAILED"
+          ? "보안 확인이 만료되었습니다. 다시 확인해 주세요."
+          : "이메일 또는 비밀번호를 확인해 주세요.",
+      );
+      captchaRef.current?.reset();
     } finally {
       setSubmitting(false);
     }
@@ -82,8 +102,14 @@ export function LoginPage() {
       <form className="grid gap-5" onSubmit={submit}>
         <Field id="login-email" name="email" label="이메일" type="email" autoComplete="email" required />
         <Field id="login-password" name="password" label="비밀번호" type="password" autoComplete="current-password" required />
+        <TurnstileChallenge
+          ref={captchaRef}
+          siteKey={auth.turnstileSiteKey}
+          action="login"
+          onTokenChange={setCaptchaToken}
+        />
         {error && <p role="alert" className="text-caption m-0 text-destructive">{error}</p>}
-        <Button variant="primary" size="lg" type="submit" disabled={submitting} className="w-full">
+        <Button variant="primary" size="lg" type="submit" disabled={submitting || (captchaRequired && !captchaToken)} className="w-full">
           {submitting ? "로그인 중" : "로그인"}
         </Button>
       </form>
@@ -101,6 +127,9 @@ export function SignUpPage() {
   const [error, setError] = React.useState<string>();
   const [nameError, setNameError] = React.useState<string>();
   const [submitting, setSubmitting] = React.useState(false);
+  const [captchaToken, setCaptchaToken] = React.useState<string>();
+  const captchaRef = React.useRef<TurnstileChallengeHandle>(null);
+  const captchaRequired = Boolean(auth.turnstileSiteKey);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,6 +141,10 @@ export function SignUpPage() {
       setNameError("프로필 이름을 입력해 주세요.");
       return;
     }
+    if (captchaRequired && !captchaToken) {
+      setError("보안 확인을 완료해 주세요.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -119,6 +152,7 @@ export function SignUpPage() {
         email: String(data.get("email")),
         password: String(data.get("password")),
         profileName: profileName.data,
+        ...(captchaToken === undefined ? {} : { captchaToken }),
       });
       navigate("/discussions", { replace: true });
     } catch (caught) {
@@ -126,9 +160,12 @@ export function SignUpPage() {
         setError("이미 가입된 이메일입니다.");
       } else if (caught instanceof AuthClientError && caught.code === "WEAK_PASSWORD") {
         setError("더 안전한 비밀번호를 입력해 주세요.");
+      } else if (caught instanceof AuthClientError && caught.code === "CAPTCHA_FAILED") {
+        setError("보안 확인이 만료되었습니다. 다시 확인해 주세요.");
       } else {
         setError("회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.");
       }
+      captchaRef.current?.reset();
     } finally {
       setSubmitting(false);
     }
@@ -141,8 +178,14 @@ export function SignUpPage() {
         <Field id="signup-name" name="profileName" label="프로필 이름" autoComplete="name" required error={nameError} />
         <Field id="signup-email" name="email" label="이메일" type="email" autoComplete="email" required />
         <Field id="signup-password" name="password" label="비밀번호" type="password" autoComplete="new-password" required />
+        <TurnstileChallenge
+          ref={captchaRef}
+          siteKey={auth.turnstileSiteKey}
+          action="signup"
+          onTokenChange={setCaptchaToken}
+        />
         {error && <p role="alert" className="text-caption m-0 text-destructive">{error}</p>}
-        <Button variant="primary" size="lg" type="submit" disabled={submitting} className="w-full">
+        <Button variant="primary" size="lg" type="submit" disabled={submitting || (captchaRequired && !captchaToken)} className="w-full">
           {submitting ? "계정 만드는 중" : "회원가입"}
         </Button>
       </form>
@@ -159,17 +202,29 @@ export function ForgotPasswordPage() {
   const [sent, setSent] = React.useState(false);
   const [error, setError] = React.useState<string>();
   const [submitting, setSubmitting] = React.useState(false);
+  const [captchaToken, setCaptchaToken] = React.useState<string>();
+  const captchaRef = React.useRef<TurnstileChallengeHandle>(null);
+  const captchaRequired = Boolean(auth.turnstileSiteKey);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
+    if (captchaRequired && !captchaToken) {
+      setError("보안 확인을 완료해 주세요.");
+      return;
+    }
     setSubmitting(true);
     const data = new FormData(event.currentTarget);
     try {
-      await auth.requestPasswordReset(String(data.get("email")));
+      await auth.requestPasswordReset(String(data.get("email")), captchaToken);
       setSent(true);
-    } catch {
-      setError("재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } catch (caught) {
+      setError(
+        caught instanceof AuthClientError && caught.code === "CAPTCHA_FAILED"
+          ? "보안 확인이 만료되었습니다. 다시 확인해 주세요."
+          : "재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      );
+      captchaRef.current?.reset();
     } finally {
       setSubmitting(false);
     }
@@ -193,8 +248,14 @@ export function ForgotPasswordPage() {
       <Heading title="비밀번호 재설정" description="가입한 이메일로 비밀번호를 바꿀 수 있는 링크를 보내드려요." />
       <form className="grid gap-5" onSubmit={submit}>
         <Field id="reset-email" name="email" label="이메일" type="email" autoComplete="email" required />
+        <TurnstileChallenge
+          ref={captchaRef}
+          siteKey={auth.turnstileSiteKey}
+          action="password_reset"
+          onTokenChange={setCaptchaToken}
+        />
         {error && <p role="alert" className="text-caption m-0 text-destructive">{error}</p>}
-        <Button variant="primary" size="lg" type="submit" disabled={submitting} className="w-full">
+        <Button variant="primary" size="lg" type="submit" disabled={submitting || (captchaRequired && !captchaToken)} className="w-full">
           {submitting ? "보내는 중" : "재설정 메일 받기"}
         </Button>
       </form>

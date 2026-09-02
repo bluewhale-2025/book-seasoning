@@ -10,11 +10,13 @@
     "eval:ai:live": "node --env-file-if-exists=../../.env --import tsx src/evals/s5-provider.live-eval.ts",
     "eval:results:live": "node --env-file-if-exists=../../.env --import tsx src/evals/s6-results.live-eval.ts",
     "eval:builder:live": "node --env-file-if-exists=../../.env --import tsx src/evals/s7-builder.live-eval.ts",
+    "smoke:account-deletion": "node --env-file-if-exists=../../.env --import tsx scripts/account-deletion.local-smoke.ts",
+    "smoke:account-deletion-recovery": "node --env-file-if-exists=../../.env --import tsx scripts/account-deletion-recovery.local-smoke.ts",
     "pretest": "pnpm --filter @bookseasoning/contracts build && pnpm --filter @bookseasoning/domain build",
     "start:api": "node dist/api/main.js",
     "start:worker": "node dist/worker/main.js",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@bookseasoning/contracts": "workspace:*",

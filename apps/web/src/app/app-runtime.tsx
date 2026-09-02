@@ -20,6 +20,7 @@ export type AppRuntime = Readonly<{
   profile: ProfileApi;
   rooms: RoomApi;
   sessions: SessionApi;
+  turnstileSiteKey?: string;
 }>;
 
 const AppRuntimeContext = React.createContext<AppRuntime | null>(null);
@@ -42,6 +43,9 @@ export function createBrowserAppRuntime(): AppRuntime {
     profile: new HttpProfileApi(http),
     rooms: new HttpRoomApi(http),
     sessions: new HttpSessionApi(http),
+    ...(environment.turnstileSiteKey === undefined
+      ? {}
+      : { turnstileSiteKey: environment.turnstileSiteKey }),
   };
 }
 

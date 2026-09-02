@@ -332,7 +332,7 @@ Book Context 저장·Provider·Builder의 상세 기준은 `docs/BOOK_CONTEXT_SP
 - Supabase Auth email/password, email confirmation off와 PKCE reset을 사용한다.
 - API는 asymmetric JWKS로 access token의 signature, issuer, audience, expiry를 검증한다.
 - strict CORS, security header, request size/time limit와 content-type 검사를 적용한다.
-- signup/reset에는 Turnstile과 Supabase rate limit, 방 password에는 actor-scoped Postgres limiter를 사용한다.
+- signup/login/reset에는 Turnstile과 Supabase rate limit, 방 password에는 actor-scoped Postgres limiter를 사용한다.
 - 방 password는 unique salt의 Argon2id PHC string으로 저장하고 password version을 함께 갱신한다.
 - raw password, token, email, content, AI_PRIVATE, IP를 일반 log에 남기지 않는다.
 - frontend에는 publishable key만 제공한다. API의 secret client는 Argon2 hash 조회와 30초 join authorization 발급처럼 browser에 허용할 수 없는 최소 RPC에만 사용하고, 실제 membership command는 사용자 JWT의 `auth.uid()`로 다시 확정한다. worker/admin/deletion secret 경로와 application module을 분리한다.

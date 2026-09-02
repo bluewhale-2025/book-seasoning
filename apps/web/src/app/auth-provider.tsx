@@ -12,18 +12,19 @@ type AuthState =
 export type AuthContextValue = AuthState &
   Readonly<{
     signUp(input: SignUpInput): Promise<void>;
-    signIn(email: string, password: string): Promise<void>;
+    signIn(email: string, password: string, captchaToken?: string): Promise<void>;
     requestPasswordReset(email: string, captchaToken?: string): Promise<void>;
     exchangePasswordResetCode(code: string): Promise<void>;
     updatePassword(password: string): Promise<void>;
     signOut(): Promise<void>;
     completeAccountDeletion(): Promise<void>;
+    turnstileSiteKey?: string;
   }>;
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { auth } = useAppRuntime();
+  const { auth, turnstileSiteKey } = useAppRuntime();
   const queryClient = useQueryClient();
   const [state, setState] = React.useState<AuthState>({ status: "loading", user: null });
 
@@ -62,8 +63,12 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
     const user = await auth.signUp(input);
     setState({ status: "authenticated", user });
   }, [auth]);
-  const signIn = React.useCallback(async (email: string, password: string) => {
-    const user = await auth.signIn(email, password);
+  const signIn = React.useCallback(async (
+    email: string,
+    password: string,
+    captchaToken?: string,
+  ) => {
+    const user = await auth.signIn(email, password, captchaToken);
     setState({ status: "authenticated", user });
   }, [auth]);
   const requestPasswordReset = React.useCallback(async (email: string, captchaToken?: string) => {
@@ -103,6 +108,7 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
     updatePassword,
     signOut,
     completeAccountDeletion,
+    turnstileSiteKey,
   }), [
     exchangePasswordResetCode,
     requestPasswordReset,
@@ -111,6 +117,7 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
     completeAccountDeletion,
     signUp,
     state,
+    turnstileSiteKey,
     updatePassword,
   ]);
 

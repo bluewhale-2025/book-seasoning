@@ -148,7 +148,7 @@ URL에는 token, 방 password, 이메일, 메시지·사전 입력·마지막 �
 
 - Supabase email/password 가입·로그인·로그아웃과 PKCE reset을 감싼다.
 - Hosted email confirmation이 꺼진 전제를 검증하되 화면은 인증 공급자 오류 문자열에 결합하지 않는다.
-- 가입 form은 이메일·비밀번호·필수 프로필 이름과 Turnstile token을 같은 흐름으로 제출한다.
+- 가입·로그인·reset form은 Cloudflare Managed Turnstile token을 각 Supabase Auth 요청과 같은 흐름으로 제출한다.
 - 로그인 실패는 계정 존재 여부를 구분하지 않는 공통 문구를 사용한다.
 - reset 요청도 이메일 존재 여부와 무관하게 같은 성공 안내를 표시한다.
 - auth 상태 확정 전 protected route를 잠깐 공개하지 않는다.
@@ -267,6 +267,8 @@ release 전 Chrome·Firefox·WebKit, 360px profile, keyboard-only와 macOS/iOS V
 - staging smoke가 통과한 동일 Git SHA artifact만 production으로 승격한다.
 - frontend release에는 contract version, API compatibility와 migration head readiness를 확인한다.
 
+현재 배포 준비 상태(2026-09-02): pnpm monorepo용 `amplify.yml`과 `.npmrc`, `customHttp.yml`을 추가해 Node/pnpm 고정, `apps/web/dist` artifact 경계, 공개 환경값 사전 검증, source map·server secret marker 검사, staging-only CSP·security header와 hashed asset cache를 version control한다. GitHub staging workflow는 DB migration과 API·Worker readiness가 성공한 뒤에만 Amplify `RELEASE`를 시작하며, branch auto-build가 켜졌거나 Amplify job의 commit이 검증한 Git SHA와 다르면 배포를 중단한다. SPA history fallback은 `docs/runbooks/AMPLIFY_HOSTING.md`의 정규식 200 rewrite를 Amplify staging app 생성 시 적용하고 직접 진입 smoke로 확인한다. 실제 app 생성·환경값 입력·첫 배포는 AWS 계정 소유·MFA·비용 알림과 OIDC role 준비 뒤에 수행한다.
+
 ## 11. Vertical slice별 프론트 산출물
 
 | Slice | 프론트 산출물 | 서버/공통 선행조건 |
@@ -283,7 +285,7 @@ release 전 Chrome·Firefox·WebKit, 360px profile, keyboard-only와 macOS/iOS V
 
 프론트는 서버가 준비되기 전 `packages/contracts`를 따르는 fake adapter로 개발할 수 있다. fake fixture가 실제 contract와 달라지지 않도록 server contract test에서 같은 fixture를 parse한다.
 
-현재 구현 상태(2026-09-02): Slice 1의 공통 authenticated HTTP client, Supabase Auth provider, 보호 route guard, signup/login/reset route와 profile 조회·수정 화면을 구현했다. access token은 Supabase client에서만 읽으며 `AUTH_REQUIRED`에만 refresh 1회와 재시도를 적용하고 `CURRENT_PASSWORD_INVALID` 같은 다른 401은 전역 logout으로 처리하지 않는다. profile은 `['profile']` Query cache를 공식 상태로 사용하며 저장 성공 response로만 이름과 header 첫 글자 avatar를 갱신한다. Local에서는 CAPTCHA 없이 동작하고 staging/production Turnstile widget과 실제 Supabase/API E2E는 남아 있다. 계정 탈퇴 UX는 Slice 8 범위로 유지한다.
+현재 구현 상태(2026-09-02): Slice 1의 공통 authenticated HTTP client, Supabase Auth provider, 보호 route guard, signup/login/reset route와 profile 조회·수정 화면을 구현했다. access token은 Supabase client에서만 읽으며 `AUTH_REQUIRED`에만 refresh 1회와 재시도를 적용하고 `CURRENT_PASSWORD_INVALID` 같은 다른 401은 전역 logout으로 처리하지 않는다. profile은 `['profile']` Query cache를 공식 상태로 사용하며 저장 성공 response로만 이름과 header 첫 글자 avatar를 갱신한다. Local에서는 site key를 생략해 CAPTCHA 없이 동작하고 staging/production은 가입·로그인·reset form의 `interaction-only` Managed Turnstile token을 Supabase Auth에 전달한다. token 실패·만료와 provider 거절 시 token을 폐기하고 widget을 reset하며, 배포 verifier는 Cloudflare test site key를 거절한다. 실제 staging E2E는 남아 있다. 계정 탈퇴 UX는 Slice 8 범위로 유지한다.
 
 Slice 2 구현 상태(2026-09-02): 공개 contract를 runtime parse하는 book/room HTTP adapter와 Query key를 추가하고 `/discussions`, `/discussions/find`, `/rooms/new`, `/rooms/:roomId` 제품 route를 구현했다. 내 토론 tab, 방·책 검색, 3단계 방 생성, 상태와 참가 가능 여부를 분리한 방 card/detail, 참가 password 오류 시 초기화·focus 복구, 생성 command ID의 동일 payload 재시도를 포함한다. desktop/mobile header는 `내 토론`·`토론 찾기`를 탐색 항목으로 두고 토론 만들기는 독립된 icon action으로 유지한다. 대기실은 `SessionSnapshot`과 heartbeat를 재사용해 접속 상태·최소 시작 인원을 표시하고, 방장 시작·설정·방 취소·권한 이전·내보내기, 일반 참가자의 참가 취소를 role과 lifecycle에 맞춰 제공한다. 시작 후 설정은 새 password와 최대 인원 증가만 허용한다. 사전 입력은 PUBLIC과 요청자 본인의 AI_PRIVATE만 렌더링하며 작성·수정·삭제와 revision conflict를 처리한다. 현재 public `MyRoomSummary`에는 참가 인원·정원 정보가 없으므로 내 토론 목록에는 이를 추측해 표시하지 않는다. 실제 local Supabase/API heartbeat를 포함한 smoke는 남아 있다.
 
@@ -292,6 +294,8 @@ Slice 3 프론트 범위와 Slice 4의 session timer·운영 control도 완료�
 Slice 6 구현 상태(2026-09-02): Closing에서는 일반 composer를 닫고 실제 참여자 본인의 마지막 한 줄만 작성·수정·삭제·건너뛰기 할 수 있게 했다. 진행 중에는 완료 인원수와 현재 사용자의 응답만 표시하고 다른 참가자의 원문은 렌더링하지 않는다. 종료 후 기본 화면은 익명화된 `오늘의 토론 기록`이며 `PENDING/PROCESSING/RETRYING/READY/FAILED/INSUFFICIENT`를 독립적으로 처리한다. 방장에게만 허용된 실패 재시도, 실제 참여자 dialog, 읽기 전용 전체 대화, PUBLIC prep과 작성자 본인의 AI_PRIVATE를 분리한 `내 준비`, 제출된 마지막 한 줄을 제공한다. 종료 후 prep 조회가 제품 명세와 달리 Scheduled에만 잠겨 있던 DB 권한을 실제 참여자/방장 읽기까지 확장했고, 다른 사용자의 AI_PRIVATE 비노출 pgTAP과 DOM 회귀를 추가했다. 360px 가로 넘침과 axe 자동 검사를 통과했다.
 
 Slice 7 구현 상태(2026-09-02): 본인의 `ProfileSchema.role`로만 표시되는 Admin 진입점과 별도 route guard, 전체 Admin HTTP adapter를 추가했다. Pack 목록·생성에서 7단계 Builder 진행과 실패 재시도, 7개 섹션·항목·출처·근거 관계 편집, revision 기반 직렬 자동 저장, 전체·항목 재생성 proposal의 현재/제안 비교와 적용·폐기, Draft → Review → Publish → Retire 흐름을 연결했다. hard blocker는 발행 action을 숨기고 warning은 정확한 code 목록을 모두 확인해야 발행할 수 있다. 일반 사용자는 Admin route에서 `/discussions`로 복귀하며 account role은 토론 참가자 payload에 노출하지 않는다. 360px 가로 넘침, 섹션 전환, axe WCAG A/AA 자동 검사를 통과했다. 다만 현재 create contract는 동일 책의 새 버전도 빈 Draft와 INITIAL run으로 시작하므로, Published 내용을 복제하는 별도 새 버전 command는 서버 contract 보강 대상으로 남아 있다.
+
+Slice 8 프론트 구현 상태(2026-09-02): 프로필 설정에서 탈퇴 preview를 매번 새로 조회하고, `ADMIN_ROLE`·`ACTIVE_PARTICIPATION`·`HOSTED_ROOM_REQUIRES_TRANSFER_OR_CANCEL` blocker가 있으면 비밀번호 form을 만들지 않은 채 해결 경로만 안내한다. 허용된 계정에는 유지·익명화되는 공동 기록과 영구 삭제되는 AI_PRIVATE 수를 분리해 보여주고, 현재 비밀번호와 명시적 영구 동의가 모두 있어야 삭제 command를 보낸다. 비밀번호는 TanStack mutation cache에 넣지 않으며 실패 즉시 input에서 제거한다. `CURRENT_PASSWORD_INVALID`와 `ACCOUNT_DELETION_PENDING`은 전역 logout으로 처리하지 않고, `COMPLETED` 뒤에는 Auth sign-out 실패와 관계없이 모든 local Query cache와 인증 상태를 폐기한다. 완료 후 로그인 화면은 탈퇴 완료를 확인해 준다. route render 실패에는 원문·credential을 표시하지 않는 전역 복구 화면을 추가했다. 360px dialog reflow와 axe WCAG A/AA 자동 검사를 통과했다. 프론트의 실제 adapter를 사용한 local Auth hard-delete smoke에서 가입·프로필 parse·preview·비밀번호 오류·삭제·재로그인 차단·같은 email의 새 UUID 재가입과 임시 계정 정리까지 통과했다. DB prepare 직후 Auth 삭제가 중단된 상태도 실제 local lease로 재현했고, Worker recovery 경로의 재claim·Auth hard-delete·완료 기록·새 UUID 재가입까지 통과했다.
 
 구조 정리(2026-09-02): `useDiscussionSession`은 route-facing facade만 유지하고 snapshot/Realtime gap 복구·heartbeat·browser lifecycle은 connection hook, outbox·pagination·typing은 messaging hook으로 분리했다. 화면은 public environment adapter 조립, session screen, server-clock countdown, message timeline과 viewport를 각 수명·책임별로 분리하며 공식 Query 상태와 scoped Zustand 상태의 소유권은 변경하지 않았다.
 

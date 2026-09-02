@@ -281,7 +281,7 @@ Postgres constraint, row lock, RLS와 transaction function은 의도적인 결�
 - Supabase Auth client만 access/refresh token을 소유하고 다른 client store, log, Sentry와 analytics에 복제하지 않는다.
 - Nest API는 Supabase JWKS로 bearer JWT의 signature, issuer, audience, expiry와 subject를 검증한다. production은 HTTPS/HSTS, Helmet, exact-origin CORS, body 한도와 strict CSP를 사용한다.
 - user-generated text는 plaintext로만 rendering하고 MVP에 HTML/Markdown/rich text·자동 linkify를 넣지 않는다.
-- 가입·reset은 Cloudflare Turnstile managed challenge와 Supabase Auth rate limit을 사용하고 로그인 CAPTCHA는 abuse 시 활성화한다.
+- 가입·로그인·reset은 Supabase Auth의 전역 Cloudflare Turnstile managed challenge와 Auth rate limit을 사용한다.
 - 방 password는 Argon2id PHC string으로 저장하고 `m=19 MiB, t=2, p=1`에서 시작해 운영 환경에서 벤치마크한다. 변경 시 hash와 `password_version`을 한 transaction에서 갱신한다.
 - 방·actor별 실패를 기본 1분 5회, 1시간 20회로 제한하고 private Postgres bucket으로 instance/restart 간 상태를 유지한다. 방 전체 lockout과 Redis는 사용하지 않는다.
 - raw IP, 제출 password와 token을 저장하지 않고 필요한 IP 식별자는 HMAC 단기 값으로만 관리한다.
@@ -944,7 +944,7 @@ MVP에는 Kubernetes, ECS, ArgoCD, Terraform/CDK와 PR별 Supabase preview proje
 ### Slice 1 — 계정과 프로필
 
 - 가입, 로그인, 로그아웃, 비밀번호 재설정
-- 가입·reset Turnstile managed challenge와 Auth rate limit
+- 가입·로그인·reset Turnstile managed challenge와 Auth rate limit
 - 필수 프로필 이름과 수정
 - route protection과 Auth/RLS 기본 테스트
 
@@ -1032,7 +1032,7 @@ MVP에는 Kubernetes, ECS, ArgoCD, Terraform/CDK와 PR별 Supabase preview proje
 13. pnpm workspace와 TypeScript project references만으로 web/server/shared package build graph를 관리하고, Turborepo/Nx는 실제 규모와 CI 필요가 생길 때까지 도입하지 않는다.
 14. Nest JSON safe logger, 제한된 Sentry와 Postgres fact로 관측성을 구성하고, 사용자 행동은 first-party authoritative event와 privacy-gated GA4 coarse funnel으로 분리한다.
 15. password reset은 Supabase Auth PKCE와 Resend custom SMTP로 전달하며, 인증 전용 domain·tracking 비활성화·generic response와 환경 분리를 적용한다.
-16. Supabase SPA session을 유지하되 strict CSP/CORS, JWKS JWT 검증, plaintext rendering으로 token 경계를 보호하고, Argon2id·Turnstile·Postgres rate limit으로 가입·reset·방 password abuse를 방어한다.
+16. Supabase SPA session을 유지하되 strict CSP/CORS, JWKS JWT 검증, plaintext rendering으로 token 경계를 보호하고, Argon2id·Turnstile·Postgres rate limit으로 인증·방 password abuse를 방어한다.
 17. GitHub Actions가 단일 배포 orchestrator로서 staging에서 검증한 동일 artifact를 production에 수동 승격하고, expand-first DB 배포와 버전별 application rollback을 사용한다.
 18. Supabase Free production DB를 일일·migration 직전 논리 dump로 S3에 30일 보관하고, 37일 삭제 tombstone·restore drill·pause/quota 감시로 RPO 24시간·RTO 8시간을 목표로 한다.
 19. Supabase의 publishable/secret API key와 asymmetric signing key를 사용하고, GitHub OIDC·environment/Lightsail runtime secret 분리·artifact scan·MFA·staged rotation으로 key lifecycle을 관리한다.

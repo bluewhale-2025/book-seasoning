@@ -16,7 +16,7 @@ export type AuthApi = Readonly<{
   getCurrentUser(): Promise<AuthUser | null>;
   subscribe(listener: (user: AuthUser | null) => void): () => void;
   signUp(input: SignUpInput): Promise<AuthUser>;
-  signIn(email: string, password: string): Promise<AuthUser>;
+  signIn(email: string, password: string, captchaToken?: string): Promise<AuthUser>;
   requestPasswordReset(email: string, redirectTo: string, captchaToken?: string): Promise<void>;
   exchangePasswordResetCode(code: string): Promise<void>;
   updatePassword(password: string): Promise<void>;
@@ -55,6 +55,9 @@ function mapAuthError(error: Readonly<{ code?: string; message: string }>): Auth
     return new AuthClientError("INVALID_CREDENTIALS");
   }
   if (error.code === "weak_password") return new AuthClientError("WEAK_PASSWORD");
+  if (error.code === "captcha_failed" || /captcha/i.test(error.message)) {
+    return new AuthClientError("CAPTCHA_FAILED");
+  }
   if (error.code === "over_request_rate_limit") {
     return new AuthClientError("RATE_LIMITED");
   }
@@ -92,8 +95,16 @@ export class SupabaseAuthApi implements AuthApi {
     return requireAuthUser(result.data.user);
   }
 
-  public async signIn(email: string, password: string): Promise<AuthUser> {
-    const result = await this.supabase.auth.signInWithPassword({ email, password });
+  public async signIn(
+    email: string,
+    password: string,
+    captchaToken?: string,
+  ): Promise<AuthUser> {
+    const result = await this.supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    });
     if (result.error) throw mapAuthError(result.error);
     return requireAuthUser(result.data.user);
   }
