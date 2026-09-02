@@ -79,5 +79,5 @@ aws lightsail create-container-service-deployment \
   --service-name "$LIGHTSAIL_SERVICE_NAME" \
   --cli-input-json "file://${deployment_path}" \
   --region "$AWS_REGION" \
-  --query 'containerService.deployment.version' \
+  --query 'containerService.currentDeployment.version' \
   --output text
