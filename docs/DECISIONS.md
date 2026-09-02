@@ -1074,11 +1074,11 @@ Amplify, Lightsail Container와 Supabase가 서로 다른 시점에 임의 버�
 
 ### Decision
 
-- 보호된 `main`과 짧은 feature branch를 사용하고 PR CI 통과 후만 merge한다.
+- production 기준선인 보호된 `main`, staging 통합·배포용 `staging`과 짧은 feature branch를 사용하고 PR CI 통과 후만 merge한다.
 - GitHub Actions를 CI와 DB·Lightsail·Amplify 배포의 단일 orchestrator로 사용한다. 각 provider의 독립 auto-deploy가 확정된 순서를 우회하지 않게 한다.
 - PR은 formatting/lint/typecheck, unit/component, local Supabase reset·pgTAP, build와 핵심 Playwright smoke를 실행한다.
-- `main` merge는 web static artifact와 server container image를 한 번 만들고 Git SHA·checksum으로 고정한 후 staging을 자동 배포한다.
-- production은 protected GitHub Environment의 명시적 수동 승인 후 staging이 검증한 동일 release artifact를 재build 없이 승격한다.
+- `staging` branch push는 web static artifact와 server container image를 한 번 만들고 Git SHA·checksum으로 고정한 후 staging을 자동 배포한다. `main` push는 staging 배포를 시작하지 않는다.
+- production은 staging에서 검증된 exact Git SHA를 `main` 기준선에 반영한 뒤 protected GitHub Environment의 명시적 수동 승인으로 동일 release artifact를 재build 없이 승격한다.
 - AWS credential은 GitHub OIDC와 environment·repository·branch로 제한된 최소 권한 IAM role을 사용한다. Supabase와 runtime provider의 secret만 environment별 GitHub secret/cloud configuration에 분리한다.
 - web artifact에는 Supabase URL·publishable key 등 공개 설정만 포함하고 secret API key, DB, OpenAI, Resend와 signing secret을 포함하지 않는다.
 - local, staging, production은 Supabase project, Lightsail service, Amplify branch/app, Sentry, GA, SMTP, domain과 secret을 공유하지 않는다.

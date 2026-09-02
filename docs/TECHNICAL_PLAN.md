@@ -877,11 +877,11 @@ Sentry와 GA도 environment를 분리한다. staging event가 production propert
 
 live-model eval은 일반 코드 PR에서 실행하지 않고 prompt, model, schema, context builder 또는 Policy 변경과 staging/release 후보에서만 별도 gate로 실행한다.
 
-`main`은 보호하고 짧은 feature branch의 PR만 merge한다. GitHub Actions가 web static artifact와 server image를 한 번 build해 Git SHA·checksum으로 고정하고, environment별 concurrency lock으로 동시 배포를 막는다. AWS 접속은 branch·environment로 제한된 GitHub OIDC IAM role을 사용한다.
+`main`은 production 기준선으로 보호하고 `staging`은 staging 통합·배포 branch로 사용한다. 짧은 feature branch는 PR CI를 거쳐 대상 branch에 merge한다. GitHub Actions가 web static artifact와 server image를 한 번 build해 Git SHA·checksum으로 고정하고, environment별 concurrency lock으로 동시 배포를 막는다. AWS 접속은 branch·environment로 제한된 GitHub OIDC IAM role을 사용한다.
 
 ### 15.3 배포와 rollback
 
-- `main` merge는 staging을 자동 배포하고 production은 protected GitHub Environment의 수동 승인 후 staging이 검증한 동일 artifact를 승격한다.
+- `staging` branch push는 staging을 자동 배포한다. `main` push는 staging 배포를 시작하지 않으며, production은 staging에서 검증된 exact Git SHA를 `main` 기준선에 반영한 뒤 protected GitHub Environment의 수동 승인으로 동일 artifact를 승격한다.
 - 환경별 Lightsail Container Service 하나에 동일 image·Git SHA의 public API와 non-public worker container를 다른 command로 함께 배포한다.
 - 배포 순서는 `backward-compatible DB expand → API/worker → web → smoke`다. backfill과 destructive contract migration은 별도 release로 나눈다.
 - smoke는 API readiness, migration head, worker heartbeat·queue, 로그인·기본 조회와 synthetic command를 검증한다.
