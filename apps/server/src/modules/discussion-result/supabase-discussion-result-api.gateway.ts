@@ -31,6 +31,27 @@ const ClosingRowSchema = z.strictObject({
 
 const ResultRowSchema = z.strictObject({ result: z.unknown() });
 
+const ResultTimestampKeys = new Set(["readyAt", "serverTime", "updatedAt"]);
+
+function normalizeResultTimestamps(value: unknown, key?: string): unknown {
+  if (typeof value === "string" && key && ResultTimestampKeys.has(key)) {
+    const timestamp = Date.parse(value);
+    return Number.isNaN(timestamp) ? value : new Date(timestamp).toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeResultTimestamps(item));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        normalizeResultTimestamps(entryValue, entryKey),
+      ]),
+    );
+  }
+  return value;
+}
+
 const RetryRowSchema = z.strictObject({
   room_id: z.uuid(),
   session_id: z.uuid(),
@@ -99,7 +120,9 @@ export class SupabaseDiscussionResultApiGateway
       .single();
     if (error !== null) fail(error, "discussion_result_failed");
     const row = ResultRowSchema.parse(data);
-    return GetDiscussionResultResponseSchema.parse(row.result);
+    return GetDiscussionResultResponseSchema.parse(
+      normalizeResultTimestamps(row.result),
+    );
   }
 
   public async retryResult(
@@ -131,7 +154,9 @@ export class SupabaseDiscussionResultApiGateway
     return ClosingResponseCommandResponseSchema.parse({
       roomId: row.room_id,
       sessionId: row.session_id,
-      closing: SessionClosingStateSchema.parse(row.closing),
+      closing: SessionClosingStateSchema.parse(
+        normalizeResultTimestamps(row.closing),
+      ),
       aggregateVersion: row.aggregate_version,
       eventCursor: row.event_cursor,
       duplicate: row.duplicate,

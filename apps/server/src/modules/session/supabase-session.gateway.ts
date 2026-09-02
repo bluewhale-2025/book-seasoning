@@ -60,6 +60,41 @@ const AppendSessionMessageRowSchema = z.strictObject({
 const SessionSyncRowSchema = z.strictObject({ snapshot: z.unknown() });
 const SessionMessagePageRowSchema = z.strictObject({ page: z.unknown() });
 
+const SessionSnapshotTimestampKeys = new Set([
+  "serverTime",
+  "scheduledStartAt",
+  "startedAt",
+  "endedAt",
+  "discussionEndsAt",
+  "extensionPromptedAt",
+  "extensionDecisionDeadlineAt",
+  "closingStartedAt",
+  "closingEndsAt",
+  "confirmedAt",
+  "occurredAt",
+  "retryAvailableAt",
+  "updatedAt",
+]);
+
+function normalizeSessionSnapshotTimestamps(value: unknown, key?: string): unknown {
+  if (typeof value === "string" && key && SessionSnapshotTimestampKeys.has(key)) {
+    const timestamp = Date.parse(value);
+    return Number.isNaN(timestamp) ? value : new Date(timestamp).toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeSessionSnapshotTimestamps(item));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        normalizeSessionSnapshotTimestamps(entryValue, entryKey),
+      ]),
+    );
+  }
+  return value;
+}
+
 const SessionHeartbeatRowSchema = z.strictObject({
   room_id: z.uuid(),
   session_id: z.uuid(),
@@ -176,7 +211,7 @@ export function mapRequestSessionAiHelpRow(
 
 export function mapSessionSyncRow(value: unknown): SessionSnapshot {
   const row = SessionSyncRowSchema.parse(value);
-  return SessionSnapshotSchema.parse(row.snapshot);
+  return SessionSnapshotSchema.parse(normalizeSessionSnapshotTimestamps(row.snapshot));
 }
 
 export function mapSessionMessagePageRow(value: unknown): SessionMessagePage {

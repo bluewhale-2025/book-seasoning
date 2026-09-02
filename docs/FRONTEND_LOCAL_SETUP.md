@@ -116,10 +116,12 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<같은 local publishable key>
 
 ### Terminal A — API
 
-root `.env`를 Node가 직접 읽도록 실행한다.
+root `.env`를 Node가 직접 읽되, `tsx`는 dependency가 설치된 server package에서
+해석되도록 실행한다.
 
 ```bash
-node --env-file-if-exists=.env --import tsx --watch apps/server/src/api/main.ts
+pnpm --dir apps/server exec node \
+  --env-file-if-exists="$PWD/.env" --import tsx --watch src/api/main.ts
 ```
 
 또는 환경 변수를 현재 shell에 이미 export했다면 다음을 사용할 수 있다.
@@ -131,7 +133,8 @@ pnpm dev:server
 ### Terminal B — Worker
 
 ```bash
-node --env-file-if-exists=.env --import tsx --watch apps/server/src/worker/main.ts
+pnpm --dir apps/server exec node \
+  --env-file-if-exists="$PWD/.env" --import tsx --watch src/worker/main.ts
 ```
 
 Worker가 없으면 기본 room/message API는 사용할 수 있지만 Opening/Host, Synthesis·공식 결과, Book Context Builder와 삭제 복구 background 작업은 완료되지 않는다.

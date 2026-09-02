@@ -17,11 +17,11 @@ describe("SupabaseSessionGateway row mappers", () => {
     const result = mapSessionSyncRow({
       snapshot: {
         sessionId: "73000000-0000-4000-8000-000000000002",
-        serverTime: "2026-09-02T00:00:00.000Z",
+        serverTime: "2026-09-02T00:00:00+00:00",
         room: {
           roomId: "73000000-0000-4000-8000-000000000001",
           title: "동기화 방",
-          scheduledStartAt: "2026-09-02T00:00:00.000Z",
+          scheduledStartAt: "2026-09-02T00:00:00+00:00",
           packVersionId: "73000000-0000-4000-8000-000000000009",
           bookTitle: "책",
           bookAuthor: "작가",
@@ -38,13 +38,13 @@ describe("SupabaseSessionGateway row mappers", () => {
           phaseVersion: 2,
           aggregateVersion: 4,
           channelEpoch: 3,
-          startedAt: "2026-09-02T00:00:00.000Z",
+          startedAt: "2026-09-02T00:00:00+00:00",
           endedAt: null,
           extensionCount: 0,
           deadlines: {
-            discussionEndsAt: "2026-09-02T00:30:00.000Z",
+            discussionEndsAt: "2026-09-02T00:30:00+00:00",
             extensionPromptedAt: null,
-            extensionDecisionDeadlineAt: "2026-09-02T00:25:00.000Z",
+            extensionDecisionDeadlineAt: "2026-09-02T00:25:00+00:00",
             closingStartedAt: null,
             closingEndsAt: null,
           },
@@ -74,6 +74,8 @@ describe("SupabaseSessionGateway row mappers", () => {
     });
 
     expect(result).toMatchObject({
+      serverTime: "2026-09-02T00:00:00.000Z",
+      room: { scheduledStartAt: "2026-09-02T00:00:00.000Z" },
       state: { phase: "CORE", channelEpoch: 3 },
       realtime: {
         eventTopic: "session:73000000-0000-4000-8000-000000000002:v3",
