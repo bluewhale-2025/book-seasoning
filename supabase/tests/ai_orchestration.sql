@@ -668,9 +668,9 @@ select ok(
 );
 update private.ai_job_runs
 set status = 'PROCESSING', attempt_count = 1,
-    started_at = '2026-09-03T00:00:00Z',
-    lease_expires_at = '2030-01-01T10:00:00Z',
-    updated_at = '2026-09-03T00:00:00Z'
+    started_at = created_at,
+    lease_expires_at = created_at + interval '1 hour',
+    updated_at = created_at
 where id = (
   select directive.job_id
   from private.ai_orchestration_jobs as directive
@@ -723,8 +723,8 @@ select is(
 update public.session_runs set last_message_seq = 9
 where id = 'ac500000-0000-4000-8000-000000000001';
 update private.ai_job_runs
-set status = 'SUCCEEDED', completed_at = '2026-09-03T00:00:01Z',
-    lease_expires_at = null, updated_at = '2026-09-03T00:00:01Z'
+set status = 'SUCCEEDED', completed_at = started_at + interval '1 second',
+    lease_expires_at = null, updated_at = started_at + interval '1 second'
 where session_id = 'ac500000-0000-4000-8000-000000000001'
   and job_type = 'PUBLIC_EVALUATION'
   and base_wiki_version = 3
