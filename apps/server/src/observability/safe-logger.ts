@@ -7,6 +7,7 @@ type LogWriter = (line: string) => void;
 
 export type SafeLogMetadata = Readonly<{
   commandId?: string;
+  dependencyCode?: string;
   durationMs?: number;
   jobId?: string;
   method?: string;

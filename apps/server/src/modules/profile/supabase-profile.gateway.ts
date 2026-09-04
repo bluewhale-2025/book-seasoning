@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ProfileSchema, type Profile } from "@bookseasoning/contracts/public";
 
 import type { RuntimeEnvironment } from "../../config/environment.js";
+import { rethrowSupabaseDependencyError } from "../../infrastructure/supabase/supabase-error.js";
 import { createUserSupabaseClient } from "../../infrastructure/supabase/user-client.js";
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import type { ProfileGateway } from "./profile.gateway.js";
@@ -43,6 +44,7 @@ export class SupabaseProfileGateway implements ProfileGateway {
       .single();
 
     if (error !== null) {
+      rethrowSupabaseDependencyError(error);
       throw new Error("profile_read_failed");
     }
 
@@ -59,6 +61,7 @@ export class SupabaseProfileGateway implements ProfileGateway {
       .single();
 
     if (error !== null) {
+      rethrowSupabaseDependencyError(error);
       throw new Error("profile_update_failed");
     }
 

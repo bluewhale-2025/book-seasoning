@@ -8,6 +8,7 @@ import {
 } from "@bookseasoning/contracts/admin";
 
 import type { RuntimeEnvironment } from "../../config/environment.js";
+import { supabaseRpcErrorCode } from "../../infrastructure/supabase/supabase-error.js";
 import { createUserSupabaseClient } from "../../infrastructure/supabase/user-client.js";
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import {
@@ -15,10 +16,11 @@ import {
   type BookBuilderAdminGateway,
 } from "./book-builder-admin.gateway.js";
 
-const fail = (error: Readonly<{ message: string }>, fallback: string): never => {
-  throw new BookBuilderAdminGatewayError(
-    error.message.match(/^[a-z_]+$/)?.[0] ?? fallback,
-  );
+const fail = (
+  error: Readonly<{ code?: string; message: string }>,
+  fallback: string,
+): never => {
+  throw new BookBuilderAdminGatewayError(supabaseRpcErrorCode(error, fallback));
 };
 
 export class SupabaseBookBuilderAdminGateway

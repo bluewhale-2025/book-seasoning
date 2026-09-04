@@ -22,6 +22,7 @@ import {
 } from "@bookseasoning/contracts/public";
 
 import type { RuntimeEnvironment } from "../../config/environment.js";
+import { supabaseRpcErrorCode } from "../../infrastructure/supabase/supabase-error.js";
 import { createUserSupabaseClient } from "../../infrastructure/supabase/user-client.js";
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import {
@@ -170,9 +171,11 @@ const SessionControlRowSchema = z.strictObject({
   server_time: z.iso.datetime({ offset: true }),
 });
 
-function gatewayError(error: Readonly<{ message: string }>, fallback: string): never {
-  const code = error.message.match(/^[a-z_]+$/)?.[0] ?? fallback;
-  throw new SessionGatewayError(code);
+function gatewayError(
+  error: Readonly<{ code?: string; message: string }>,
+  fallback: string,
+): never {
+  throw new SessionGatewayError(supabaseRpcErrorCode(error, fallback));
 }
 
 export function mapSessionHeartbeatRow(value: unknown): SessionHeartbeatResponse {

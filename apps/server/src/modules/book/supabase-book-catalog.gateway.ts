@@ -7,6 +7,7 @@ import {
 } from "@bookseasoning/contracts/public";
 
 import type { RuntimeEnvironment } from "../../config/environment.js";
+import { rethrowSupabaseDependencyError } from "../../infrastructure/supabase/supabase-error.js";
 import { createUserSupabaseClient } from "../../infrastructure/supabase/user-client.js";
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import type { BookCatalogGateway } from "./book-catalog.gateway.js";
@@ -55,6 +56,7 @@ export class SupabaseBookCatalogGateway implements BookCatalogGateway {
     });
 
     if (error !== null) {
+      rethrowSupabaseDependencyError(error);
       throw new Error("book_catalog_search_failed");
     }
 

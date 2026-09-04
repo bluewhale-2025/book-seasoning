@@ -16,6 +16,7 @@ import {
   createSecretSupabaseClient,
   createUserSupabaseClient,
 } from "../../infrastructure/supabase/user-client.js";
+import { supabaseRpcErrorCode } from "../../infrastructure/supabase/supabase-error.js";
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import {
   RoomGatewayError,
@@ -42,9 +43,11 @@ import {
   parseRoomDetailRow,
 } from "./room-row.mapper.js";
 
-function gatewayError(error: Readonly<{ message: string }>, fallback: string): never {
-  const code = error.message.match(/^[a-z_]+$/)?.[0] ?? fallback;
-  throw new RoomGatewayError(code);
+function gatewayError(
+  error: Readonly<{ code?: string; message: string }>,
+  fallback: string,
+): never {
+  throw new RoomGatewayError(supabaseRpcErrorCode(error, fallback));
 }
 
 export class SupabaseRoomGateway implements RoomGateway {

@@ -11,6 +11,7 @@ import { assertPublicPayloadKeys } from "@bookseasoning/domain/privacy";
 
 import type { SafeLogger } from "./safe-logger.js";
 import { PublicHttpException } from "../http/public-http.exception.js";
+import { SupabaseDependencyUnavailableException } from "../infrastructure/supabase/supabase-error.js";
 
 const publicErrorByStatus: Readonly<
   Record<number, Readonly<{ code: string; message: string }>>
@@ -74,6 +75,9 @@ export class SafeHttpExceptionFilter implements ExceptionFilter {
     assertPublicPayloadKeys(payload);
     const route = request.routeOptions.url;
     this.logger.event("error", "http.request_failed", {
+      ...(exception instanceof SupabaseDependencyUnavailableException
+        ? { dependencyCode: exception.dependencyCode }
+        : {}),
       method: request.method,
       ...(route === undefined ? {} : { route }),
       statusCode: status,

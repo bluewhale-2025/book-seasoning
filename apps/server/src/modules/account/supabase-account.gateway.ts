@@ -4,6 +4,7 @@ import { z } from "zod";
 import { AccountDeletionPreviewSchema } from "@bookseasoning/contracts/public";
 
 import type { RuntimeEnvironment } from "../../config/environment.js";
+import { supabaseRpcErrorCode } from "../../infrastructure/supabase/supabase-error.js";
 import {
   createSecretSupabaseClient,
   createUserSupabaseClient,
@@ -22,9 +23,6 @@ const PreparedSchema = z.strictObject({
   serverTime: z.iso.datetime({ offset: true }),
 });
 
-const code = (message: string, fallback: string): string =>
-  message.match(/^[a-z_]+$/)?.[0] ?? fallback;
-
 export class SupabaseAccountGateway implements AccountGateway {
   public constructor(private readonly environment: RuntimeEnvironment) {}
 
@@ -33,7 +31,11 @@ export class SupabaseAccountGateway implements AccountGateway {
       this.environment,
       actor,
     ).rpc("get_account_deletion_preview");
-    if (error !== null) throw new AccountGatewayError(code(error.message,"account_deletion_preview_failed"));
+    if (error !== null) {
+      throw new AccountGatewayError(
+        supabaseRpcErrorCode(error, "account_deletion_preview_failed"),
+      );
+    }
     return AccountDeletionPreviewSchema.parse(data);
   }
 
@@ -75,7 +77,11 @@ export class SupabaseAccountGateway implements AccountGateway {
       p_command_id: commandId,
       p_request_fingerprint: requestFingerprint,
     });
-    if (error !== null) throw new AccountGatewayError(code(error.message,"account_deletion_prepare_failed"));
+    if (error !== null) {
+      throw new AccountGatewayError(
+        supabaseRpcErrorCode(error, "account_deletion_prepare_failed"),
+      );
+    }
     return PreparedSchema.parse(data);
   }
 

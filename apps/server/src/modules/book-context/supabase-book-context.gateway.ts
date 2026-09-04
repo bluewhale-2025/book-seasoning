@@ -4,6 +4,7 @@ import {
 } from "@bookseasoning/contracts/internal";
 
 import type { RuntimeEnvironment } from "../../config/environment.js";
+import { rethrowSupabaseDependencyError } from "../../infrastructure/supabase/supabase-error.js";
 import { createSecretSupabaseClient } from "../../infrastructure/supabase/user-client.js";
 import type { BookContextGateway } from "./book-context.gateway.js";
 
@@ -20,10 +21,13 @@ export class SupabaseBookContextGateway implements BookContextGateway {
       p_pack_version_id: packVersionId,
     });
 
-    if (error !== null || data === null) {
+    if (error !== null) {
+      rethrowSupabaseDependencyError(error);
+      throw new Error("book_context_pack_not_found");
+    }
+    if (data === null) {
       throw new Error("book_context_pack_not_found");
     }
     return mapBookContextDocument(data);
   }
 }
-
