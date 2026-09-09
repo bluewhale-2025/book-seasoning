@@ -1,9 +1,8 @@
 name: production-backup
 
 on:
-  schedule:
-    - cron: "23 18 * * *"
-    - cron: "8 * * * *"
+  # Scheduled backups are paused until production resources and secrets are ready.
+  # Restore schedules before production launch: "23 18 * * *" and "8 * * * *" (UTC).
   workflow_dispatch:
     inputs:
       reason:

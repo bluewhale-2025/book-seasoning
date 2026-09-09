@@ -7,7 +7,8 @@
 - `scripts/backup-supabase.sh`는 Supabase `roles.sql`, `schema.sql`, `data.sql`을 별도로 생성해 하나의 압축 archive로 만든다.
 - archive는 AWS 서울 리전 private S3 bucket에 TLS로 전송하고 SSE-KMS를 강제한다.
 - object metadata에는 content SHA-256, backup reason, migration head만 기록한다.
-- GitHub workflow는 매일 03:23 KST에 DB backup, 매시 8분에 restore tombstone snapshot을 실행한다.
+- 현재 production 환경이 없어 GitHub workflow의 예약 실행은 비활성화되어 있으며 `workflow_dispatch` 수동 실행만 유지한다 (2026-09-09).
+- production 자원과 아래 필수 설정을 준비하고 수동 backup·restore 검증을 마친 뒤, production 운영 전에 `.github/workflows/backup.yml`의 `on.schedule`에 `23 18 * * *`와 `8 * * * *` (UTC)를 복원한다. 활성화 후 매일 03:23 KST에 DB backup, 매시 8분에 restore tombstone snapshot을 실행한다.
 - S3 lifecycle은 `infra/aws/backup-lifecycle.json`의 DB 30일, tombstone 37일 규칙을 적용한다.
 - backup job의 AWS role은 대상 prefix write/head와 KMS encrypt에 필요한 최소 권한만 가진다.
 
