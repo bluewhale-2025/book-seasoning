@@ -418,6 +418,9 @@ AI 평가와 결과, Builder, 보관 만료는 재시도와 중복 방지가 필
 
 2026-09-03에는 시간 기반 orchestration이 마지막 AI 개입 뒤 새 참가자 응답과 90초 cooldown을 모두 요구하도록 보강했다. AI 발화만 이어지는 silence loop와 cooldown 중 불필요한 provider 호출을 차단하되, human message 기반 job은 계속 허용한다. 추가로 Cron 해상도를 10초에서 1초로 조정했다. reconciler는 한 번에 active session 최대 100개만 보고 transaction advisory lock으로 중첩 실행을 거절하므로 60초 침묵 threshold를 1초 해상도로 감지하면서 같은 cycle의 중복 enqueue를 막는다. 새 공개 메시지가 없고 latest Wiki가 같은 cursor를 이미 덮는 `SILENCE` job은 active attempt·authoritative cursor·Wiki version과 이전 committed evaluation을 worker-only 함수에서 함께 검증한 뒤 canonical evaluation을 재사용한다. 조건이 하나라도 어긋나면 Provider를 호출하는 정상 경로로 돌아가며, 재사용 경로도 새 immutable evaluation과 Policy decision을 남겨 상태→판단의 감사 연결을 보존한다.
 
+2026-10-07 사용자 합의로 AI 시간 reconciler 주기를 1초에서 5초로 조정했다. 침묵 60초 threshold와 기존 cooldown·중복 방지·Provider 호출 gate는 유지하며, 감지 대기 시간이 최대 약 5초가 되는 대신 해당 cron 실행 및 실행 이력 발생량을 80% 줄인다(하루 86,400회 → 17,280회). 기존 migration은 보존하고 후속 migration으로 동일 이름의 job을 재등록한다. 기존 cron 실행 로그 삭제 및 보관 정책은 이 변경에 포함하지 않는다.
+
+
 ## [TECH-007] OpenAI Responses API와 구조화된 AI contract
 
 - Date: 2026-08-30

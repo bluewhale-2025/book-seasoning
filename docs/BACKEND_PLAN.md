@@ -285,7 +285,7 @@ AI provider와 책 지식 provider는 다른 port다.
 - Host context에는 non-WAIT Policy action, 공개 메시지·Wiki 상태와 필요한 Pack subset만 들어간다. action/attribution/Pack/cursor/reference/privacy 검증 뒤 worker-only commit 함수가 최신 phase/version/message cursor를 다시 확인한다. stale 결과와 자동 Host 실패는 참가자 메시지 흐름을 막지 않으며 실패 원문을 공개하지 않는다.
 - Opening의 `TRANSITION` Host action은 AI 메시지와 함께 같은 transaction에서 authoritative phase를 `CORE`로 전환한다.
 - Opening에서 관점 2개 이상이라는 Provider 개수만으로 전환하지 않는다. 각기 다른 참가자의 서로 다른 PUBLIC message가 서로 다른 요약의 관점 근거로 연결돼야 하며, 동일 evidence 복제나 단일 발언자 분할은 `WAIT`한다.
-- S5-9 orchestration은 session 시작과 연장 window를 상태 변경 transaction 안에서 enqueue하고, participant message trigger와 1초 Cron이 message/participation/silence/topic 후보만 계산한다. Cron 안에서는 provider를 호출하지 않는다. 최대 100개 active session scan과 transaction advisory lock으로 중첩 실행을 막으며, 60초 침묵 threshold를 1초 해상도로 감지한다. 마지막 AI 개입 뒤 참가자 응답이 없거나 90초 cooldown 중이면 silence/topic 시간 trigger는 enqueue하지 않되 새 message 기반 평가는 유지한다.
+- S5-9 orchestration은 session 시작과 연장 window를 상태 변경 transaction 안에서 enqueue하고, participant message trigger와 5초 Cron이 message/participation/silence/topic 후보만 계산한다. Cron 안에서는 provider를 호출하지 않는다. 최대 100개 active session scan과 transaction advisory lock으로 중첩 실행을 막으며, 60초 침묵 threshold를 5초 해상도로 감지한다. 마지막 AI 개입 뒤 참가자 응답이 없거나 90초 cooldown 중이면 silence/topic 시간 trigger는 enqueue하지 않되 새 message 기반 평가는 유지한다.
 - `POST /v1/rooms/:roomId/session/ai-help`는 방장만 네 가지 고정 reason으로 호출할 수 있는 비동기 command다. one-in-flight와 idempotency를 보장하고 처리/실패 상태는 방장 snapshot에만 보인다. 연장 의견은 모든 참가자에게 `PENDING | READY | UNAVAILABLE`로 보이되 방장 결정을 대체하거나 차단하지 않는다.
 - 동일 session의 active orchestration job, stable job key, active attempt fencing과 최대 3회 stale refresh가 중복·오래된 결과의 공개 효과를 막는다. worker는 60초 lease를 20초마다 DB/PGMQ에 함께 연장한다.
 

@@ -85,8 +85,8 @@ select is(
     from cron.job
     where jobname = 'bookseasoning-enqueue-due-ai-evaluations'
   ),
-  '1 second',
-  'time-signal reconciliation runs with one-second scheduling resolution'
+  '5 seconds',
+  'time-signal reconciliation runs with five-second scheduling resolution'
 );
 select ok(
   has_function_privilege(
