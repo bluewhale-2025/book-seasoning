@@ -302,3 +302,8 @@ Realtime 장애 중에도 이미 받은 확정 대화는 지우지 않는다. re
 - 다른 사용자의 Closing body와 `AI_PRIVATE` canary가 event/cache/DOM에 나타나지 않는다.
 - typing/Presence 손실이 공식 participant나 session state를 바꾸지 않는다.
 
+
+
+### 관리자 Console 진단
+
+관리자 AI 진단은 Realtime event가 아닌 별도 `GET /v1/admin/rooms/:roomId/ai-diagnostics` polling으로 관찰한다(TECH-034). 내부 metric과 Policy/job 진단을 공식 broadcast/snapshot/Host 메시지에 추가하지 않는다.

@@ -308,3 +308,8 @@ Slice 8 프론트 구현 상태(2026-09-02): 프로필 설정에서 탈퇴 previ
 - 핵심 flow가 360px, keyboard, axe와 지원 browser matrix를 통과한다.
 - content, credential와 `AI_PRIVATE`가 log, error, analytics와 public artifact에 포함되지 않는다.
 - `docs/TECHNICAL_PLAN.md`의 해당 slice E2E 완료 기준을 서버와 함께 통과한다.
+
+
+### 관리자 테스트 Console (2026-10-16)
+
+토론 route에 ADMIN 전용 `AiDiagnosticsConsole`을 연결한다. 안전한 진단 API를 즉시 및 응답 완료 5초 후마다 조회해 `[AI state]`를 출력한다. 일반 회원은 polling하지 않고 unmount/권한 거절/종료 시 중단한다. runtime schema 실패나 네트워크 오류 시 코드를 제외한 error 객체는 출력하지 않는다. 일반 session 모델과 화면에는 내부 진단을 넣지 않는다.

@@ -1071,3 +1071,8 @@ MVP에는 Kubernetes, ECS, ArgoCD, Terraform/CDK와 PR별 Supabase preview proje
 - OpenAI: [Responses API migration](https://developers.openai.com/api/docs/guides/migrate-to-responses), [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Models](https://developers.openai.com/api/docs/models)
 - Browser and accessibility: [Vite build browser compatibility](https://vite.dev/guide/build.html#browser-compatibility), [WCAG 2.2](https://www.w3.org/TR/WCAG22/), [Web Vitals](https://web.dev/articles/vitals)
 - Testing and delivery: [Vitest](https://vitest.dev/guide/), [Playwright](https://playwright.dev/docs/languages), [Supabase database testing](https://supabase.com/docs/guides/local-development/testing/overview), [k6 WebSockets](https://grafana.com/docs/k6/latest/using-k6/protocols/websockets/), [GitHub deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments)
+
+
+### 관리자 AI 진단 보완 (2026-10-16, TECH-034)
+
+토론 테스트용 ADMIN 진단은 별도 read-only HTTP/RPC와 `contracts/admin` projection으로 제공한다. ADMIN + 기존 session-read 권한을 매번 검증하며 private 저장소를 browser에 직접 공개하지 않는다. 원문 없는 평가/Policy/job/gate 상태만 Console에 출력하고 공식 참가자 snapshot/event에는 추가하지 않는다.

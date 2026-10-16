@@ -312,3 +312,10 @@ Draft/Review/Publish/Retire 상태 전이는 snapshot revision으로 낙관적 �
 - 새 endpoint 또는 error code를 추가하면 Controller, `packages/contracts`, 이 문서와 frontend fixture를 같은 변경에서 갱신한다.
 - destructive 변경은 DB expand → server → frontend migration → old field 제거 순서로 한다.
 - `contracts/internal`의 AI/Worker model을 browser public package로 재수출하지 않는다.
+
+
+## Admin AI diagnostics (2026-10-16)
+
+`GET /v1/admin/rooms/:roomId/ai-diagnostics` → `AdminAiDiagnosticsSchema` (`packages/contracts/admin`). 호출자는 ADMIN이면서 기존 세션 읽기 권한이 있어야 한다. 미인증 401, 비관리자·방 접근 불가 403, 잘못된 UUID 400. `Cache-Control: no-store`.
+
+`checkedAt`, session/phase/cursor, 마지막 참가자·AI 개입 시각, `silenceSeconds`, `cooldownRemainingSeconds`, `awaitingParticipantResponse`, `latestJob`과 최근 평가 20건(`evaluations`, 최신순)을 반환한다. 평가에는 독립 metric의 level/reason code, confidence, commit status, Policy action/reason만 있다. Policy가 아직 없으면 action은 null이다. 진단 응답은 원문·Wiki·private signal을 포함하지 않으며 일반 snapshot/event에 합치지 않는다.

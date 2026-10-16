@@ -3688,3 +3688,14 @@ Discussion Metrics threshold, Activity 시간 기준, 실제 weight 계산 방�
 ### Result
 실험 후 기록.
 ```
+
+
+## [TECH-034] 관리자 토론 테스트용 Console 진단
+
+- Date: 2026-10-16
+- 사용자 요청: 토론 테스트 중 브라우저 개발자도구에서 AI 평가 상태를 확인한다.
+- 제품의 내부 Diagnostic(§21.2)을 위한 읽기 전용 기능이다. AI 판단·개입 규칙은 변경하지 않는다.
+- `GET /v1/admin/rooms/:roomId/ai-diagnostics`는 호출자 JWT로 RPC를 실행하며 매 호출마다 ADMIN role과 기존 세션 읽기 권한을 모두 검사한다. private table 권한과 참가자 snapshot/event는 확대하지 않는다.
+- 응답은 최근 평가 20건의 7개 metric level/reason code, confidence, commit status, Policy action/reason과 최신 job 상태, 침묵 시간·cooldown·AI 발언 뒤 응답 대기 여부만 명시적으로 투영한다. 평가·Wiki 전체, 요약, evidence/participant reference, 메시지/prep/prompt 원문과 private lane은 제외한다.
+- 관리자 토론 route에서 즉시 조회하고 각 응답 뒤 5초에 다시 조회해 `[AI state]`로 출력한다. 이는 cron 실행 추적이 아니라 저장된 평가와 현재 객관 상태의 관찰이다. 평가를 새로 실행하지 않는다. 중복 요청을 겹치지 않고 unmount/권한 거절/종료 시 중단한다. HTTP 응답은 `no-store`, error 로그는 코드만 허용한다.
+- polling은 별도 Realtime 진단 protocol보다 단순하며, console history는 최근 20건으로 제한된다. 테스트 운영자가 탭을 열었을 때만 조회 비용이 발생한다.

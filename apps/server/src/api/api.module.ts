@@ -11,6 +11,7 @@ import { SessionModule } from "../modules/session/session.module.js";
 import { DiscussionResultApiModule } from "../modules/discussion-result/discussion-result-api.module.js";
 import { BookBuilderAdminModule } from "../modules/book-builder-admin/book-builder-admin.module.js";
 import { AccountModule } from "../modules/account/account.module.js";
+import { AiDiagnosticsModule } from "../modules/ai-diagnostics/ai-diagnostics.module.js";
 
 @Module({})
 export class ApiModule {
@@ -28,6 +29,7 @@ export class ApiModule {
         DiscussionResultApiModule,
         BookBuilderAdminModule,
         AccountModule,
+        AiDiagnosticsModule,
       ],
     };
   }

@@ -94,6 +94,16 @@ describe("API bootstrap", () => {
     expect(response.json()).toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
+  it("requires authentication for admin AI diagnostics", async () => {
+    app = await createApiApplication(environment);
+    await app.init();
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/admin/rooms/475cbcf9-d8ed-480d-9d27-bcac55eec3c4/ai-diagnostics",
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
   it("protects room search and commands", async () => {
     app = await createApiApplication(environment);
     await app.init();

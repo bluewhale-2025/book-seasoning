@@ -464,3 +464,8 @@ Slice 4 검증(2026-09-02): pure domain fake-clock test, contract/Nest unit test
 - Pack item/source/evidence, Provider exact version, official result, 탈퇴·익명화와 보관 규칙이 회귀 test로 고정된다.
 - Lightsail artifact, migration, secret, backup/restore와 rollback runbook이 준비된다.
 - `docs/TECHNICAL_PLAN.md`의 해당 slice E2E 완료 기준을 frontend와 함께 통과한다.
+
+
+### Admin AI diagnostics (2026-10-16)
+
+`AiDiagnosticsModule`의 GET route는 호출자 JWT로 `admin_read_session_ai_diagnostics(roomId)`를 실행한다. RPC는 ADMIN과 기존 세션 읽기 권한을 확인하고 private 평가를 bounded 명시적 projection으로 반환한다. strict admin schema 검증·no-store를 적용한다. pgTAP으로 일반 회원/외부 관리자/권한 회수 거절과 원문·evidence 비노출을 검증한다.

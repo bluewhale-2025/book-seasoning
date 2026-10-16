@@ -315,3 +315,10 @@ control 표시에는 최소 다음 축을 함께 사용한다.
 - AI/provider 실패 중에도 인간 대화와 종료 흐름이 유지된다.
 - `AI_PRIVATE` canary가 DOM, public cache, event, error, analytics에 나타나지 않는다.
 - 360px, keyboard, axe와 지원 browser 핵심 flow가 통과한다.
+
+
+## 관리자 AI 상태 Console (2026-10-16)
+
+ADMIN 계정으로 `/rooms/:roomId/session`을 열고 개발자도구 Console에서 `[AI state]`를 필터한다. 진입 시와 각 응답 완료 5초 후마다 관리자 진단 API를 호출해 안전한 projection만 출력한다. 일반 회원은 요청하지 않으며 최종 권한은 RPC가 확인한다. 종료·탭 unmount·권한 거절 시 polling을 중단한다.
+
+`evaluations[0]`은 마지막 저장된 평가이며 현재 상태의 매초 재평가가 아니다. `awaitingParticipantResponse: true`는 AI 개입 뒤 새 참가자 발언이 없다는 뜻이다. `cooldownRemainingSeconds`와 `silenceSeconds`를 함께 확인하고 `latestJob`으로 실행/실패 상태를 구분한다. 원문·token·private context를 Console에 추가하지 않는다.

@@ -293,3 +293,8 @@ Slice 5는 아래 단위로 하나씩 구현하고 각 단계의 deterministic g
 exact/metadata retrieval eval이 부족할 때만 같은 retriever interface 뒤에 derived Search Chunk와 semantic adapter를 활성화한다. Final Wiki·Synthesis·Closing·공식 기록 lifecycle은 Slice 6에서 구현한다.
 
 AI slice가 완료됐다고 판단하려면 Wiki가 “생성된다”는 것뿐 아니라 reference 정합성, stale-write 방지, privacy 경계, checkpoint/finalization과 실패 시 이전 버전 보존까지 검증해야 한다.
+
+
+### 관리자 브라우저 진단 (2026-10-16)
+
+TECH-034에 따라 참가 중인 ADMIN의 읽기 전용 진단 projection을 제공한다. 7개 metric level/reason, 평가 commit status/confidence, Policy action/reason, job 상태와 객관적 침묵·cooldown·응답 대기를 반환한다. `summaryState`, evidence, participant-state, Wiki, provider artifact와 모든 원문은 제외한다. 브라우저의 5초 polling은 기존 평가를 관찰하며 trigger/enqueue/Policy/Host 동작을 바꾸지 않는다.
